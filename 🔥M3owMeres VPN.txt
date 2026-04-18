@@ -9,8 +9,6 @@ vless://a707c280-f8ab-4411-b724-bd9244fd4e65@lv.crunch-crunch.com:11111?encrypti
 
 vless://5cd9be48-6cdd-452a-b728-65a47fb6a8fc@45.136.126.116:7443/?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=timeweb.cloud&fp=chrome&security=reality&pbk=rTp9PEn36FtQFu32jWAPO3r-e1W2px3RGSuhR-L1DVM&sid=&packetEncoding=xudp#🇵🇱%20Poland%20Warsaw%20AUTO⚡
 
-vless://2bbff6be-e96a-4ca3-9cf6-a36445e6681f@nl.realfast.click:443?fp=chrome&mode=packet-up&path=/api/me&pbk=1pMPaYppx4EQxHCE_nr6niNYmBZqcLWEt3xRQXUelSw&security=reality&sid=3adba0ac09bf&sni=nl.realfast.click&type=xhttp#🇳🇱%20Netherlands%20Amsterdam%20Быстрый⚡⚡
-
 vless://951c7521-7158-4978-b82c-2736d4f21044@chicagomeow.nethcloud.top:443?flow=xtls-rprx-vision&fp=chrome&pbk=1HeKf_8KDjfzXfUi9P7WBaGStMvr96TKdUbofpkwBzQ&security=reality&sid=8bd29483ded126b4&sni=wikihow.com&type=tcp#🇺🇸%20USA%20Chicago%20LTE⚡⚡
 
 vless://5cd9be48-6cdd-452a-b728-65a47fb6a8fc@45.136.126.116:7443/?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=timeweb.cloud&fp=chrome&security=reality&pbk=rTp9PEn36FtQFu32jWAPO3r-e1W2px3RGSuhR-L1DVM&sid=&packetEncoding=xudp#🇵🇱%20Poland%20Warsaw%20LTE⚡⚡
