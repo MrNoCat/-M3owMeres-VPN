@@ -1,5 +1,4 @@
 # profile-title: 🔥M3owMeres VPN
-# Количество: 19
 
 ss://bm9uZToxNGIwMmUyYS04OTMwLTRhZmItODQxMi1lYTRhNDk1NGNhNWI@104.238.70.16:443?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dylnhh.us.ci%3Bpath%3D%2F14b02e2a-8930-4afb-8412-ea4a4954ca5b%2F%3Fed%5C%3D2560%3Btls%3Bmux%3D0#%F0%9F%8C%90%20Anycast%20%7C%20LTE%E2%9A%A1
 
