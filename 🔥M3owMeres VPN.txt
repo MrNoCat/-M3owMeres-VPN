@@ -1,7 +1,5 @@
 # profile-title: 🔥M3owMeres VPN
 
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTp0cm9qYW4@pl1-ss.vproxyy.online:2096#🇵🇱 Poland | AUTO⚡
-ss://bm9uZToxNGIwMmUyYS04OTMwLTRhZmItODQxMi1lYTRhNDk1NGNhNWI@104.254.140.16:443?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dylnhh.us.ci%3Bpath%3D%2F14b02e2a-8930-4afb-8412-ea4a4954ca5b%2F%3Fed%5C%3D2560%3Btls%3Bmux%3D0#🌐%20Anycast-IP%20%7C%20LTE⚡⚡
 hysteria2://dongtaiwang.com@163.172.113.118:40022?insecure=1&sni=www.microsoft.com&mport=41000-42000#🇫🇷%20Франция%2C%20Париж%20%7C%20Быстрый⚡⚡
 hysteria2://fb211338854624f161f1Ea3D9584E2DEFE7c10A3@sde.dbp.qzz.io:8443?security=tls&insecure=1&sni=dbp.qzz.io#🇩🇪%20Германия%2C%20Бад-Зоден%20%7C%20AUTO⚡
 hysteria2://github.com%2FAlvin9999-newpac%2Ffanqiang@83.243.86.103:12855?encryption=none&sni=www.microsoft.com&insecure=1#🇩🇪%20Германия%2C%20Берлин%20%7C%20LTE⚡⚡
@@ -10,7 +8,6 @@ hysteria2://3286b74d-a633-401f-8e22-6e8e61c5f1d9@45.192.195.52:5555?alpn=h3&inse
 hysteria2://79d73809-f5ed-4099-8588-ba77578def1d@iij.mggl.wang:35789?sni=iij.mggl.wang&insecure=1&allowInsecure=1#🇯🇵%20Япония%20%7C%20LTE⚡⚡
 hysteria2://qQe1z5kU8kN6SlKnDt9Ru3Qp@vpn-jp-016.fastervpn.world:443?encryption=none&sni=vpn-jp-016.fastervpn.world&insecure=1#🇯🇵%20Япония%2C%20Тиёда%20%7C%20Быстрый⚡⚡
 vmess://eyJhZGQiOiJhLnNoYW5saWFuZzMzMi50b3AiLCJhaWQiOiIwIiwiaG9zdCI6IiIsImlkIjoiYjk2MjNhNTUtZmQ1MS00NzI3LWNjYmEtNWViMmQwYmNjYTE4IiwibmV0Ijoid3MiLCJwYXRoIjoiL2FiYyIsInBvcnQiOiI1Nzk5MiIsInBzIjoi8J+Hr/Cfh7UgSmFwYW4sIFNoaWJ1eWEgQ2l0eSB8IFtCTF0iLCJzY3kiOiJhdXRvIiwic2VydmljZU5hbWUiOiIiLCJzbmkiOiJhLnNoYW5saWFuZzMzMi50b3AiLCJ0bHMiOiJ0bHMiLCJ2IjoiMiIsInR5cGUiOiJub25lIiwiYWxwbiI6IiIsImZwIjoiIn0=
-hysteria2://820409af-997a-41c4-9e51-46f373951a39@144.24.74.102:50914?insecure=1&sni=www.bing.com#🇰🇷%20Южная%20Корея%2C%20Чхунчхон%20%7C%20AUTO⚡
 vmess://eyJ2IjoiMiIsInBzIjoi8J+HsPCfh7cgU291dGggS29yZWEsIFlhbmdjaGVvbmRvbmcgfCBbQkxdIiwiYWRkIjoia3IwMi5hMGEueHl6IiwicG9ydCI6IjgwIiwiaWQiOiI1MTU1ODYwZS1kMDdkLTQ2YzMtOTEyOC0zYWZiZDg0NjI2YzciLCJhaWQiOiIwIiwic2N5IjoiYXV0byIsIm5ldCI6IndzIiwidHlwZSI6Im5vbmUiLCJob3N0Ijoia3IwMi5hMGEueHl6IiwicGF0aCI6Ii9jY3R2MTMubTN1OCIsInRscyI6IiIsImZwIjoiY2hyb21lIiwic25pIjoiIiwiYWxwbiI6IiJ9
 hysteria2://123456789StrongPass@144.31.224.14:443/?insecure=1&sni=www.cloudflare.com#🇳🇱%20Нидерланды%2C%20Амстердам%20%7C%20LTE⚡⚡
 hysteria2://hysteria2_fastlane_gvhjqqhs5%3Afa9BG0K2anbTthiGCpus2Dq82LUuPYUp@144.31.134.98:1935?insecure=1&sni=nl1.h.smartaisupport.ru#🇳🇱%20Нидерланды%2C%20Амстердам-Центр%20%7C%20Быстрый⚡⚡
