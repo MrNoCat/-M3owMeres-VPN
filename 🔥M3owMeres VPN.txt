@@ -1,8 +1,6 @@
 # profile-title: 🔥M3owMeres VPN
 
-trojan://trojan@pl1.vproxyy.online:443?security=tls&sni=pl1.vproxyy.online&type=ws&host=pl1.vproxyy.online&path=/&allowInsecure=1#🇵🇱 Poland | FAST⚡⚡
 ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTp0cm9qYW4@pl1-ss.vproxyy.online:2096#🇵🇱 Poland | AUTO⚡
-
 ss://bm9uZToxNGIwMmUyYS04OTMwLTRhZmItODQxMi1lYTRhNDk1NGNhNWI@104.238.70.16:443?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dylnhh.us.ci%3Bpath%3D%2F14b02e2a-8930-4afb-8412-ea4a4954ca5b%2F%3Fed%5C%3D2560%3Btls%3Bmux%3D0#%F0%9F%8C%90%20Anycast-IP%20%7C%20%5BIPv6%5D%20%7C%20FAST%E2%9A%A1%E2%9A%A1
 hysteria2://dongtaiwang.com@163.172.113.118:40022/?insecure=1&sni=www.microsoft.com#%F0%9F%87%AB%F0%9F%87%B7%20France%2C%20Paris%20%7C%20LTE%E2%9A%A1%E2%9A%A1
 hysteria2://fb211338854624f161f1Ea3D9584E2DEFE7c10A3@sde.dbp.qzz.io:8443?insecure=1&sni=dbp.qzz.io#%F0%9F%87%A9%F0%9F%87%AA%20Germany%2C%20Bad%20Soden%20am%20Taunus%20%7C%20AUTO%E2%9A%A1
