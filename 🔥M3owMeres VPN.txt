@@ -1,17 +1,19 @@
 # profile-title: 🔥M3owMeres VPN
 
-ss://bm9uZToxNGIwMmUyYS04OTMwLTRhZmItODQxMi1lYTRhNDk1NGNhNWI@104.238.70.16:443?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dylnhh.us.ci%3Bpath%3D%2F14b02e2a-8930-4afb-8412-ea4a4954ca5b%2F%3Fed%5C%3D2560%3Btls%3Bmux%3D0#🌐%20Anycast%20%7C%20Быстрый⚡⚡
-hysteria2://dongtaiwang.com@163.172.113.118:40022/?insecure=1&sni=www.microsoft.com#🇫🇷%20Франция%2C%20Париж%20%7C%20Быстрый⚡⚡
-hysteria2://fb211338854624f161f1Ea3D9584E2DEFE7c10A3@sde.dbp.qzz.io:8443?insecure=1&sni=dbp.qzz.io#🇩🇪%20Германия%2C%20Бад-Зоден%20%7C%20Быстрый⚡⚡
-hysteria2://github.com%2FAlvin9999-newpac%2Ffanqiang@83.243.86.103:12855?encryption=none&sni=www.microsoft.com&insecure=1#🇩🇪%20Германия%2C%20Берлин%20%7C%20Быстрый⚡⚡
-hysteria2://4d092122-268a-4a1a-b23f-83931c5abc3a@37.114.49.38:2056/?insecure=1#🇩🇪%20Германия%2C%20Франкфурт%20%7C%20Быстрый⚡⚡
-hysteria2://3286b74d-a633-401f-8e22-6e8e61c5f1d9@45.192.195.52:5555/?insecure=1#🇭🇰%20Гонконг%20%7C%20Быстрый⚡⚡
-hysteria2://qQe1z5kU8kN6SlKnDt9Ru3Qp@vpn-jp-016.fastervpn.world:443?encryption=none&sni=vpn-jp-016.fastervpn.world&insecure=1#🇯🇵%20Япония%2C%20Тиёда%20%7C%20Быстрый⚡⚡
-vmess://eyJhZGQiOiJhLnNoYW5saWFuZzMzMi50b3AiLCJhaWQiOiIwIiwiaG9zdCI6IiIsImlkIjoiYjk2MjNhNTUtZmQ1MS00NzI3LWNjYmEtNWViMmQwYmNjYTE4IiwibmV0Ijoid3MiLCJwYXRoIjoiL2FiYyIsInBvcnQiOiI1Nzk5MiIsInBzIjoi8J+Hr/Cfh7Ug0K/Qv9C+0L3QuNGPLCDQodC40LHRg9GPICB8INCR0YvRgdGC0YDRi9C5Iiwic2N5IjoiYXV0byIsInNlcnZpY2VOYW1lIjoiIiwic25pIjoiYS5zaGFubGlhbmczMzIudG9wIiwidGxzIjoidGxzIiwidiI6IjIiLCJ0eXBlIjoibm9uZSIsImFscG4iOiIiLCJmcCI6IiJ9
-hysteria2://820409af-997a-41c4-9e51-46f373951a39@144.24.74.102:50914?insecure=1&sni=www.bing.com#🇰🇷%20Южная%20Корея%2C%20Чхунчхон%20%7C%20Быстрый⚡⚡
-vmess://eyJ2IjoiMiIsInBzIjoi8J+HsPCfh7cg0K7QttC90LDRjyDQmtC%2B0YDQtdGPLCDQr9C90LPRh9C%2B0L3QtNC%2B0L0gIHwg0JHRi9GB0YLRgNGL0LkiLCJhZGQiOiJrcjAyLmEwYS54eXoiLCJwb3J0IjoiODAiLCJpZCI6IjUxNTU4NjBlLWQwN2QtNDZjMy05MTI4LTNhZmJkODQ2MjZjNyIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0eXBlIjoibm9uZSIsImhvc3QiOiJrcjAyLmEwYS54eXoiLCJwYXRoIjoiL2NjdHYxMy5tM3U4IiwidGxzIjoiIiwiZnAiOiJjaHJvbWUiLCJzbmkiOiIiLCJhbHBuIjoiIn0=
-hysteria2://123456789StrongPass@144.31.224.14:443/?insecure=1&sni=www.cloudflare.com#🇳🇱%20Нидерланды%2C%20Амстердам%20%7C%20Быстрый⚡⚡
-hysteria2://hysteria2_fastlane_gvhjqqhs5%3Afa9BG0K2anbTthiGCpus2Dq82LUuPYUp@144.31.134.98:1935?insecure=1&sni=nl1.h.smartaisupport.ru#🇳🇱%20Нидерланды%2C%20Амстердам-Центр%20%7C%20Быстрый⚡⚡
-hysteria2://qQe1z5kU8kN6SlKnDt9Ru3Qp@vpn-vn-001.fastervpn.world:443?insecure=1&sni=vpn-vn-001.fastervpn.world#🇻🇳%20Вьетнам%2C%20Куан%20Бон%20%7C%20Быстрый⚡⚡
-trojan://a612c919-fe63-4da7-86a8-c6c3f824ca57@109.73.193.81:443?security=reality&sni=www.google.com&fp=random&pbk=vLLO06dCKIhSxGfKc4SJiGgmPTej8z6tdOAZ8C7KYSc&sid=4a&spx=/&type=tcp#🇷🇺%20Россия%2C%20Москва%20%7C%20Быстрый⚡⚡
-trojan://M7v%25w11Se%2A@hyfuuf6.wsone.icu:443?security=tls&type=tcp#🇮🇳%20Индия%2C%20Нью-Дели%20%7C%20Быстрый⚡⚡
+hysteria2://dongtaiwang.com@163.172.113.118:40022/?insecure=1&sni=www.microsoft.com#Быстрый⚡⚡ | France, Paris
+hysteria2://hysteria_master_password@72.56.122.195:443?encryption=none&sni=google.com&insecure=1#Лайт⚡⚡ | Germany, Frankfurt
+hysteria2://3286b74d-a633-401f-8e22-6e8e61c5f1d9@45.192.195.52:5555/?insecure=1#Пинг⚡ | Hong Kong
+hysteria2://qQe1z5kU8kN6SlKnDt9Ru3Qp@vpn-jp-016.fastervpn.world:443?insecure=1&sni=vpn-jp-016.fastervpn.world#Токио⚡ | Japan
+hysteria2://820409af-997a-41c4-9e51-46f373951a39@144.24.74.102:50914?insecure=1&sni=www.bing.com#Корея⚡ | South Korea
+hysteria2://123456789StrongPass@144.31.224.14:443/?insecure=1&sni=www.cloudflare.com#Амстердам⚡ | Netherlands
+hysteria2://qQe1z5kU8kN6SlKnDt9Ru3Qp@vpn-vn-001.fastervpn.world:443?insecure=1&sni=vpn-vn-001.fastervpn.world#Вьетнам⚡ | Vietnam
+hysteria2://userpass@38.180.100.200:443?sni=apple.com&insecure=1#США⚡ | USA, New York
+hysteria2://fastvpn@51.158.54.12:443?sni=cloudflare.com&insecure=1#Париж⚡ | France
+hysteria2://secure@89.163.220.10:443?sni=google.com&insecure=1#Берлин⚡ | Germany
+hysteria2://asiafast@103.173.255.88:443?sni=youtube.com&insecure=1#Сингапур⚡ | Singapore
+hysteria2://ultrafast@45.89.52.66:443?sni=netflix.com&insecure=1#Лондон⚡ | UK
+trojan://a612c919-fe63-4da7-86a8-c6c3f824ca57@109.73.193.81:443?security=reality&sni=www.google.com&fp=chrome&pbk=vLLO06dCKIhSxGfKc4SJiGgmPTej8z6tdOAZ8C7KYSc&sid=4a&type=tcp#Москва⚡ | Russia
+trojan://M7v%25w11Se%2A@hyfuuf6.wsone.icu:443?security=tls&type=tcp#Индия⚡ | India
+trojan://vpnsecure@185.159.247.120:443?security=tls&type=tcp#Турция⚡ | Turkey
+trojan://fastnode@92.38.169.45:443?security=tls&type=tcp#Польша⚡ | Poland
+trojan://global@172.67.200.10:443?security=tls&type=tcp#AUTO⚡ | Anycast
