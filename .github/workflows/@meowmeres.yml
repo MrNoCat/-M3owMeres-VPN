@@ -3,7 +3,7 @@ name: VPN Auto Detect Build
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"   # fallback (раз в 6 часов на всякий случай)
+    - cron: "0 */2 * * *"   # fallback (раз в 2 часа на всякий случай)
 
 permissions:
   pages: write
