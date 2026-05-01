@@ -1,4 +1,4 @@
-name: MeowMeres VPN Smart Build
+name: M3owMeres VPN Build
 
 on:
   schedule:
@@ -18,7 +18,7 @@ jobs:
         run: |
           curl -fLsS -o original.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt
 
-      - name: Clean + BL remove + sort
+      - name: Build VPN file (stable)
         run: |
           export TZ=Europe/Moscow
 
@@ -28,9 +28,9 @@ jobs:
 
           mkdir -p public
 
-          > temp_sorted.txt
+          > temp.txt
 
-          # безопасная сортировка (без зависаний)
+          # стабильная "скорость"
           while read line; do
             host=$(echo "$line" | grep -oE '@[^: ]+' | tr -d '@')
 
@@ -40,12 +40,12 @@ jobs:
               score=999
             fi
 
-            echo "$score|$line" >> temp_sorted.txt
+            echo "$score|$line" >> temp.txt
           done < no_bl.txt
 
-          sort -n temp_sorted.txt | cut -d'|' -f2- > sorted.txt
+          sort -n temp.txt | cut -d'|' -f2- > sorted.txt
 
-          # дата / время / количество
+          # header
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < sorted.txt)
@@ -54,20 +54,8 @@ jobs:
             echo "# profile-title: 🔥MeowMeres VPN"
             echo "# Date/Time: $DATE $TIME (Moscow)"
             echo "# Количество: $COUNT"
-            echo "# mode: smart sorted"
             echo ""
-
-            echo "### ⚡ FASTEST"
-            head -n 50 sorted.txt
-            echo ""
-
-            echo "### 🌍 OTHER"
-            tail -n +51 sorted.txt | grep -vi "ru" || true
-            echo ""
-
-            echo "### 🇷🇺 RU"
-            grep -i "ru" sorted.txt || true
-
+            cat sorted.txt
           } > public/vpn.txt
 
       - name: Upload Pages artifact
@@ -87,5 +75,5 @@ jobs:
       name: github-pages
 
     steps:
-      - name: Deploy to Pages
+      - name: Deploy
         uses: actions/deploy-pages@v4
