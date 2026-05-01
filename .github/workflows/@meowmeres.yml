@@ -1,9 +1,9 @@
-name: M3owMeres VPN Build
+name: VPN Auto Detect Build
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"   # fallback (раз в 6 часов на всякий случай)
 
 permissions:
   pages: write
@@ -14,15 +14,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download VPN source
+      - name: Download source
         run: |
-          curl -fLsS -o original.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt
+          curl -fLsS -o original.txt https://raw.githubusercontent.com/GoldCaviar/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt
 
-      - name: Build VPN file (stable)
+      - name: Check changes (hash detect)
+        id: check
+        run: |
+          NEW_HASH=$(sha256sum original.txt | cut -d' ' -f1)
+
+          echo "new_hash=$NEW_HASH" >> $GITHUB_OUTPUT
+
+          # прошлый hash (если есть)
+          if [ -f last_hash.txt ]; then
+            OLD_HASH=$(cat last_hash.txt)
+          else
+            OLD_HASH=""
+          fi
+
+          echo "old_hash=$OLD_HASH"
+
+          if [ "$NEW_HASH" = "$OLD_HASH" ]; then
+            echo "NO_CHANGE=true" >> $GITHUB_OUTPUT
+          else
+            echo "NO_CHANGE=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo $NEW_HASH > last_hash.txt
+
+      - name: Stop if no changes
+        if: steps.check.outputs.NO_CHANGE == 'true'
+        run: |
+          echo "No changes in source → skipping build"
+          exit 0
+
+      - name: Build VPN file
         run: |
           export TZ=Europe/Moscow
 
-          # чистка
           grep -v '^#' original.txt | grep -v '^$' > clean.txt
           sed 's/BL//g' clean.txt > no_bl.txt
 
@@ -30,22 +59,14 @@ jobs:
 
           > temp.txt
 
-          # стабильная "скорость"
           while read line; do
             host=$(echo "$line" | grep -oE '@[^: ]+' | tr -d '@')
-
-            if [ -n "$host" ]; then
-              score=$((RANDOM % 100))
-            else
-              score=999
-            fi
-
+            score=$((RANDOM % 100))
             echo "$score|$line" >> temp.txt
           done < no_bl.txt
 
           sort -n temp.txt | cut -d'|' -f2- > sorted.txt
 
-          # header
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < sorted.txt)
@@ -55,7 +76,9 @@ jobs:
             echo "# Date/Time: $DATE $TIME (Moscow)"
             echo "# Количество: $COUNT"
             echo ""
+
             cat sorted.txt
+
           } > public/vpn.txt
 
       - name: Upload Pages artifact
