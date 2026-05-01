@@ -1,0 +1,97 @@
+name: VPN Smart Ping Sort Build
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download source
+        run: |
+          curl -fLsS -o original.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt
+
+      - name: Smart ping sort + clean
+        run: |
+          export TZ=Europe/Moscow
+
+          grep -v '^#' original.txt | grep -v '^$' > clean.txt
+          sed 's/BL//g' clean.txt > no_bl.txt
+
+          mkdir -p public
+
+          echo "" > sorted.txt
+
+          # функция измерения "пинга" (через быстрый tcp connect)
+          measure() {
+            start=$(date +%s%N)
+            curl -s --max-time 2 --connect-timeout 2 "$1" >/dev/null 2>&1
+            end=$(date +%s%N)
+            echo $(( (end - start) / 1000000 ))
+          }
+
+          # сортировка через временный файл
+          > temp_sorted.txt
+
+          while read line; do
+            host=$(echo "$line" | grep -oE '@[^: ]+' | tr -d '@')
+
+            if [ -n "$host" ]; then
+              ping=$(timeout 2 bash -c "</dev/tcp/${host}/443" 2>/dev/null && echo 50 || echo 999)
+            else
+              ping=999
+            fi
+
+            echo "$ping|$line" >> temp_sorted.txt
+          done < no_bl.txt
+
+          # сортируем по ping
+          sort -n temp_sorted.txt | cut -d'|' -f2- > sorted.txt
+
+          DATE=$(date +"%d.%m.%Y")
+          TIME=$(date +"%H:%M")
+
+          {
+            echo "# profile-title: 🔥M3owMeres VPN | SMART PING SORT"
+            echo "# update: $DATE $TIME (MSK)"
+            echo ""
+
+            echo "### ⚡ FASTEST SERVERS"
+            head -n 50 sorted.txt
+            echo ""
+
+            echo "### 🌍 OTHER"
+            tail -n +51 sorted.txt | grep -vi "ru" || true
+            echo ""
+
+            echo "### 🇷🇺 RU (LOW PRIORITY)"
+            grep -i "ru" sorted.txt || true
+
+          } > public/white-list.txt
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+
+    steps:
+      - name: Deploy
+        uses: actions/deploy-pages@v4
