@@ -49,22 +49,22 @@ jobs:
 
           # очистка
           grep -v '^#' original.txt | grep -v '^$' > clean.txt
-          sed 's/[BL]//g' clean.txt > no_bl.txt
+          sed 's/BL//g' clean.txt > no_bl.txt
 
-          # УБИРАЕМ ДУБЛИ СРАЗУ
-          sort -u no_bl.txt > unique.txt
+          # 🔥 УДАЛЕНИЕ ДУБЛЕЙ ПО host:port (главный фикс)
+          awk -F'[@#]' '!seen[$2]++ && length($2)>5' no_bl.txt > unique.txt
 
           mkdir -p public
           > temp.txt
 
-          # псевдо сортировка (пока рандом)
+          # псевдо сортировка
           while read line; do
             score=$((RANDOM % 100))
             echo "$score|$line" >> temp.txt
           done < unique.txt
 
-          # финальная сортировка + защита от дублей
-          sort -n temp.txt | cut -d'|' -f2- | sort -u > sorted.txt
+          # финальная сортировка (дубли уже убраны)
+          sort -n temp.txt | cut -d'|' -f2- > sorted.txt
 
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
