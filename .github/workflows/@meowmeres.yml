@@ -40,32 +40,39 @@ jobs:
       - name: Stop if no changes
         if: steps.check.outputs.NO_CHANGE == 'true'
         run: |
-          echo "No changes in source → skipping build"
+          echo "No changes → skip"
           exit 0
 
-      - name: Build VPN file
+      - name: Build VPN files (Android + iOS safe)
         run: |
           export TZ=Europe/Moscow
 
-          # очистка
+          # 🔥 базовая очистка
           grep -v '^#' original.txt | grep -v '^$' > clean.txt
+
+          # 🔥 удаление BL
           sed 's/BL//g' clean.txt > no_bl.txt
 
-          # 🔥 УДАЛЕНИЕ ДУБЛЕЙ ПО host:port (главный фикс)
+          # 🔥 удаление дублей по host:port
           awk -F'[@#]' '!seen[$2]++ && length($2)>5' no_bl.txt > unique.txt
 
-          mkdir -p public
+          # 🔥 оставить только валидные VPN строки
+          grep -E "^vless://|^trojan://|^ss://" unique.txt > valid.txt
+
+          # 🔥 Android SAFE (без заголовков вообще)
+          cp valid.txt android.txt
+
+          # 🔥 iOS / full version (с сортировкой)
           > temp.txt
 
-          # псевдо сортировка
           while read line; do
             score=$((RANDOM % 100))
             echo "$score|$line" >> temp.txt
-          done < unique.txt
+          done < valid.txt
 
-          # финальная сортировка (дубли уже убраны)
           sort -n temp.txt | cut -d'|' -f2- > sorted.txt
 
+          # 🔥 финальный файл
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < sorted.txt)
@@ -73,10 +80,14 @@ jobs:
           {
             echo "# profile-title: 🔥MeowMeres VPN"
             echo "# Date/Time: $DATE $TIME (Moscow)"
-            echo "# Количество: $COUNT"
+            echo "# Servers: $COUNT"
             echo ""
             cat sorted.txt
-          } > public/vpn.txt
+          } > vpn.txt
+
+          # 🔥 Android version (ВАЖНО: БЕЗ МЕТА ДАННЫХ)
+          cp android.txt public/android.txt
+          cp vpn.txt public/vpn.txt
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
