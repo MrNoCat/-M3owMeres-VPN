@@ -3,7 +3,7 @@ name: VPN Auto Detect Build
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"   
+    - cron: "*/30 * * * *"
 
 permissions:
   pages: write
@@ -23,16 +23,11 @@ jobs:
         run: |
           NEW_HASH=$(sha256sum original.txt | cut -d' ' -f1)
 
-          echo "new_hash=$NEW_HASH" >> $GITHUB_OUTPUT
-
-          # прошлый hash (если есть)
           if [ -f last_hash.txt ]; then
             OLD_HASH=$(cat last_hash.txt)
           else
             OLD_HASH=""
           fi
-
-          echo "old_hash=$OLD_HASH"
 
           if [ "$NEW_HASH" = "$OLD_HASH" ]; then
             echo "NO_CHANGE=true" >> $GITHUB_OUTPUT
@@ -52,20 +47,24 @@ jobs:
         run: |
           export TZ=Europe/Moscow
 
+          # очистка
           grep -v '^#' original.txt | grep -v '^$' > clean.txt
-          sed 's/BL//g' clean.txt > no_bl.txt
+          sed 's/[BL]//g' clean.txt > no_bl.txt
+
+          # УБИРАЕМ ДУБЛИ СРАЗУ
+          sort -u no_bl.txt > unique.txt
 
           mkdir -p public
-
           > temp.txt
 
+          # псевдо сортировка (пока рандом)
           while read line; do
-            host=$(echo "$line" | grep -oE '@[^: ]+' | tr -d '@')
             score=$((RANDOM % 100))
             echo "$score|$line" >> temp.txt
-          done < no_bl.txt
+          done < unique.txt
 
-          sort -n temp.txt | cut -d'|' -f2- > sorted.txt
+          # финальная сортировка + защита от дублей
+          sort -n temp.txt | cut -d'|' -f2- | sort -u > sorted.txt
 
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
@@ -76,9 +75,7 @@ jobs:
             echo "# Date/Time: $DATE $TIME (Moscow)"
             echo "# Количество: $COUNT"
             echo ""
-
             cat sorted.txt
-
           } > public/vpn.txt
 
       - name: Upload Pages artifact
