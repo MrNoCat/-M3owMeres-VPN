@@ -40,7 +40,7 @@ jobs:
       - name: Stop if no changes
         if: steps.check.outputs.NO_CHANGE == 'true'
         run: |
-          echo "No changes → skip"
+          echo "No changes → skip build"
           exit 0
 
       - name: Build VPN files (Android + iOS safe)
@@ -50,32 +50,42 @@ jobs:
           # 🔥 базовая очистка
           grep -v '^#' original.txt | grep -v '^$' > clean.txt
 
-          # 🔥 удаление BL
+          # 🔥 убираем BL
           sed 's/BL//g' clean.txt > no_bl.txt
 
           # 🔥 удаление дублей по host:port
-          awk -F'[@#]' '!seen[$2]++ && length($2)>5' no_bl.txt > unique.txt
+          awk -F'[@#]' '!seen[$2]++ && $2!="" && length($2)>5' no_bl.txt > unique.txt
 
-          # 🔥 оставить только валидные VPN строки
+          # 🔥 оставляем только валидные VPN строки
           grep -E "^vless://|^trojan://|^ss://" unique.txt > valid.txt
 
-          # 🔥 Android SAFE (без заголовков вообще)
+          # 🔥 ANDROID (чистый файл без заголовков)
           cp valid.txt android.txt
 
-          # 🔥 iOS / full version (с сортировкой)
+          # если пусто — защита
+          if [ ! -s valid.txt ]; then
+            echo "EMPTY LIST" > public/vpn.txt
+            mkdir -p public
+            cp android.txt public/android.txt
+            exit 0
+          fi
+
+          # 🔥 iOS / full version
           > temp.txt
 
-          while read line; do
+          while read -r line; do
+            [ -z "$line" ] && continue
             score=$((RANDOM % 100))
             echo "$score|$line" >> temp.txt
           done < valid.txt
 
           sort -n temp.txt | cut -d'|' -f2- > sorted.txt
 
-          # 🔥 финальный файл
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < sorted.txt)
+
+          mkdir -p public
 
           {
             echo "# profile-title: 🔥MeowMeres VPN"
@@ -83,11 +93,9 @@ jobs:
             echo "# Servers: $COUNT"
             echo ""
             cat sorted.txt
-          } > vpn.txt
+          } > public/vpn.txt
 
-          # 🔥 Android version (ВАЖНО: БЕЗ МЕТА ДАННЫХ)
           cp android.txt public/android.txt
-          cp vpn.txt public/vpn.txt
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
