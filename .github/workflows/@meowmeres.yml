@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Download source
         run: |
-          curl -fLsS -o original.txt https://raw.githack.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt
+          curl -fLsS -o original.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt
 
       - name: Check changes (hash detect)
         id: check
