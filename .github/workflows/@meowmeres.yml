@@ -46,33 +46,35 @@ jobs:
       - name: Build VPN files (Android + iOS safe)
         run: |
           export TZ=Europe/Moscow
+          mkdir -p public
 
-          # 🔥 базовая очистка
-          grep -v '^#' original.txt | grep -v '^$' > clean.txt
+          # фиксим бинарный файл / кодировку
+          strings original.txt | tr -d '\r' > fixed.txt
 
-          # 🔥 убираем BL
+          # базовая очистка
+          grep -a -v '^#' fixed.txt | grep -a -v '^$' > clean.txt
+
+          # убираем BL
           sed 's/[BL]//g' clean.txt > no_bl.txt
 
-          # 🔥 удаление дублей по host:port
-          awk -F'[@#]' '!seen[$2]++ && $2!="" && length($2)>5' no_bl.txt > unique.txt
+          # удаление дублей
+          awk '!seen[$0]++' no_bl.txt > unique.txt
 
-          # 🔥 оставляем только валидные VPN строки
-          grep -E "^vless://|^trojan://|^ss://" unique.txt > valid.txt
+          # оставляем только валидные VPN строки
+          grep -E '^vless://|^trojan://|^ss://' unique.txt > valid.txt
 
-          # 🔥 ANDROID (чистый файл без заголовков)
-          cp valid.txt android.txt
-
-          # если пусто — защита
+          # если пусто
           if [ ! -s valid.txt ]; then
             echo "EMPTY LIST" > public/vpn.txt
-            mkdir -p public
-            cp android.txt public/android.txt
+            echo "EMPTY LIST" > public/android.txt
             exit 0
           fi
 
-          # 🔥 iOS / full version
-          > temp.txt
+          # Android (чистый файл)
+          cp valid.txt public/android.txt
 
+          # сортировка (рандом score пока)
+          > temp.txt
           while read -r line; do
             [ -z "$line" ] && continue
             score=$((RANDOM % 100))
@@ -85,8 +87,6 @@ jobs:
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < sorted.txt)
 
-          mkdir -p public
-
           {
             echo "# profile-title: 🔥MeowMeres VPN"
             echo "# Date/Time: $DATE $TIME (Moscow)"
@@ -94,8 +94,6 @@ jobs:
             echo ""
             cat sorted.txt
           } > public/vpn.txt
-
-          cp android.txt public/android.txt
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
