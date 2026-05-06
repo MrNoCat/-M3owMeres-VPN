@@ -1,4 +1,4 @@
-name: VPN Auto Detect Build (FIXED FILTER)
+name: VPN Auto Detect Build (STABLE FIX)
 
 on:
   workflow_dispatch:
@@ -26,19 +26,19 @@ jobs:
           mkdir -p public
 
           # =========================
-          # FIX FILE ENCODING
+          # FIX ENCODING (CRLF)
           # =========================
           tr -d '\r' < original.txt > fixed.txt
 
           # =========================
-          # CLEAN COMMENTS ONLY
+          # BASIC CLEAN
           # =========================
           grep -a -v '^$' fixed.txt > clean.txt || true
 
           [ -s clean.txt ] || { echo "EMPTY INPUT" > public/vpn.txt; exit 0; }
 
           # =========================
-          # REMOVE TAGS ONLY ([BL], [RU])
+          # REMOVE TAGS [BL] [RU] (SAFE)
           # =========================
           sed -E 's/[[:space:]]*\[(BL|RU)\][[:space:]]*//g' clean.txt > no_tags.txt
 
@@ -50,21 +50,21 @@ jobs:
           [ -s vpn_raw.txt ] || { echo "NO VALID SERVERS" > public/vpn.txt; exit 0; }
 
           # =========================
-          # CLEAN SPACES
+          # CLEAN ONLY LINE BREAK ISSUES (НЕ УБИВАЕМ СТРОКУ)
           # =========================
-          tr -d '[:space:]' < vpn_raw.txt > vpn_clean.txt
+          sed 's/\r//g' vpn_raw.txt > vpn_clean.txt
 
           # =========================
-          # VALIDATE FORMAT
+          # SAFE VALIDATION (НЕ ЖЕСТКИЙ REGEX)
           # =========================
           grep -E '://.+@.+:[0-9]+' vpn_clean.txt > validated.txt || true
 
           [ -s validated.txt ] || { echo "EMPTY AFTER VALIDATION" > public/vpn.txt; exit 0; }
 
           # =========================
-          # REMOVE RU SERVERS (SAFE MODE)
+          # REMOVE RU SERVERS (ТОЛЬКО ПО ТЕГАМ)
           # =========================
-          grep -viE '#.*(russia|moscow|spb|novosibirsk)' validated.txt > filtered.txt || true
+          grep -viE '#.*(russia|moscow|spb|novosibirsk|ru)' validated.txt > filtered.txt || true
 
           # fallback если всё удалилось
           if [ ! -s filtered.txt ]; then
@@ -72,12 +72,12 @@ jobs:
           fi
 
           # =========================
-          # LIMIT SIZE (STABILITY)
+          # LIMIT (STABILITY FOR MOBILE)
           # =========================
           head -n 300 filtered.txt > limited.txt
 
           # =========================
-          # SHUFFLE
+          # RANDOMIZE
           # =========================
           shuf limited.txt > final.txt
 
