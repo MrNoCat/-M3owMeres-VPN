@@ -43,56 +43,66 @@ jobs:
           echo "No changes → skip build"
           exit 0
 
-      - name: Build VPN files (Android + iOS safe)
+      - name: Build VPN files (clean + no RU)
         run: |
           export TZ=Europe/Moscow
           mkdir -p public
 
-          # фиксим бинарный файл / кодировку
+          # 🔥 фикс бинарного файла
           strings original.txt | tr -d '\r' > fixed.txt
 
-          # базовая очистка
+          # 🔥 базовая очистка
           grep -a -v '^#' fixed.txt | grep -a -v '^$' > clean.txt
 
-          # убираем BL
-          sed 's/BL//g' clean.txt > no_bl.txt
+          # 🔥 убираем только #BL (не ломаем ссылки)
+          sed 's/#BL[^ ]*//g' clean.txt > no_bl.txt
 
-          # удаление дублей
-          awk '!seen[$0]++' no_bl.txt > unique.txt
+          # 🔥 удаляем дубли по host:port
+          awk -F'[@#]' '{
+            if (match($0, /@([^#]+)/, m)) {
+              hp=m[1]
+              if (!seen[hp]++) print $0
+            }
+          }' no_bl.txt > unique.txt
 
-          # оставляем только валидные VPN строки
-          grep -E '^vless://|^trojan://|^ss://' unique.txt > valid.txt
+          # 🔥 оставляем только валидные VPN строки
+          grep -E '^vless://|^trojan://|^ss://' unique.txt \
+          | tr -d '\r' \
+          | sed 's/[[:space:]]//g' \
+          | grep -v '^$' > valid.txt
 
-          # если пусто
-          if [ ! -s valid.txt ]; then
+          # 🔥 доп. проверка (чтобы не было мусора)
+          grep -E '://.+@.+:[0-9]+' valid.txt > validated.txt
+
+          # 🔥 УДАЛЯЕМ RU СЕРВЕРА (по названию)
+          grep -viE '#.*(russia|ru|moscow|spb|novosibirsk)' validated.txt > no_ru.txt
+
+          # если после фильтра пусто
+          if [ ! -s no_ru.txt ]; then
             echo "EMPTY LIST" > public/vpn.txt
             echo "EMPTY LIST" > public/android.txt
             exit 0
           fi
 
-          # Android (чистый файл)
-          cp valid.txt public/android.txt
+          # 🔥 ограничиваем список (ускоряет импорт)
+          head -n 300 no_ru.txt > limited.txt
 
-          # сортировка (рандом score пока)
-          > temp.txt
-          while read -r line; do
-            [ -z "$line" ] && continue
-            score=$((RANDOM % 100))
-            echo "$score|$line" >> temp.txt
-          done < valid.txt
+          # 🔥 перемешиваем
+          shuf limited.txt > final.txt
 
-          sort -n temp.txt | cut -d'|' -f2- > sorted.txt
+          # Android (чистый)
+          cp final.txt public/android.txt
 
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
-          COUNT=$(wc -l < sorted.txt)
+          COUNT=$(wc -l < final.txt)
 
           {
             echo "# profile-title: 🔥MeowMeres VPN"
             echo "# Date/Time: $DATE $TIME (Moscow)"
             echo "# Servers: $COUNT"
             echo ""
-            cat sorted.txt
+            cat final.txt
           } > public/vpn.txt
 
       - name: Upload Pages artifact
