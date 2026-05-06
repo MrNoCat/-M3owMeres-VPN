@@ -55,7 +55,7 @@ jobs:
           grep -a -v '^#' fixed.txt | grep -a -v '^$' > clean.txt
 
           # убираем BL
-          sed 's/[BL]//g' clean.txt > no_bl.txt
+          sed 's/BL//g' clean.txt > no_bl.txt
 
           # удаление дублей
           awk '!seen[$0]++' no_bl.txt > unique.txt
