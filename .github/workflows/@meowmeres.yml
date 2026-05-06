@@ -55,7 +55,7 @@ jobs:
           grep -a -v '^#' fixed.txt | grep -a -v '^$' > clean.txt
 
           # 🔥 убираем только #BL (не ломаем ссылки)
-          sed 's/#BL[^ ]*//g' clean.txt > no_bl.txt
+          grep -vi '\[BL\]' clean.txt > no_bl.txt
 
           # 🔥 удаляем дубли по host:port
           awk -F'[@#]' '{
