@@ -1,4 +1,4 @@
-name: VPN Auto Detect Build
+name: VPN Auto Detect Build (FIXED FILTER)
 
 on:
   workflow_dispatch:
@@ -26,27 +26,26 @@ jobs:
           mkdir -p public
 
           # =========================
-          # FIX ENCODING / CRLF
+          # FIX FILE ENCODING
           # =========================
           tr -d '\r' < original.txt > fixed.txt
 
           # =========================
-          # BASIC CLEAN
+          # CLEAN COMMENTS ONLY
           # =========================
-          grep -a -v '^#' fixed.txt \
-          | grep -a -v '^$' > clean.txt || true
+          grep -a -v '^$' fixed.txt > clean.txt || true
 
           [ -s clean.txt ] || { echo "EMPTY INPUT" > public/vpn.txt; exit 0; }
 
           # =========================
-          # REMOVE [BL] (ГАРАНТИРОВАННО)
+          # REMOVE TAGS ONLY ([BL], [RU])
           # =========================
-          sed -E 's/[[:space:]]*\[BL\][[:space:]]*//g' clean.txt > no_bl.txt
+          sed -E 's/[[:space:]]*\[(BL|RU)\][[:space:]]*//g' clean.txt > no_tags.txt
 
           # =========================
           # KEEP ONLY VPN LINKS
           # =========================
-          grep -E '^vless://|^trojan://|^ss://' no_bl.txt > vpn_raw.txt || true
+          grep -E '^vless://|^trojan://|^ss://' no_tags.txt > vpn_raw.txt || true
 
           [ -s vpn_raw.txt ] || { echo "NO VALID SERVERS" > public/vpn.txt; exit 0; }
 
@@ -60,17 +59,22 @@ jobs:
           # =========================
           grep -E '://.+@.+:[0-9]+' vpn_clean.txt > validated.txt || true
 
-          # =========================
-          # REMOVE RU SERVERS (BY TAGS)
-          # =========================
-          grep -viE '(russia|ru|moscow|spb|novosibirsk)' validated.txt > no_ru.txt || true
+          [ -s validated.txt ] || { echo "EMPTY AFTER VALIDATION" > public/vpn.txt; exit 0; }
 
-          [ -s no_ru.txt ] || { echo "EMPTY AFTER FILTER" > public/vpn.txt; exit 0; }
+          # =========================
+          # REMOVE RU SERVERS (SAFE MODE)
+          # =========================
+          grep -viE '#.*(russia|moscow|spb|novosibirsk)' validated.txt > filtered.txt || true
+
+          # fallback если всё удалилось
+          if [ ! -s filtered.txt ]; then
+            cp validated.txt filtered.txt
+          fi
 
           # =========================
           # LIMIT SIZE (STABILITY)
           # =========================
-          head -n 300 no_ru.txt > limited.txt
+          head -n 300 filtered.txt > limited.txt
 
           # =========================
           # SHUFFLE
