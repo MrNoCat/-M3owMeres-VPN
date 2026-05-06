@@ -18,92 +18,81 @@ jobs:
         run: |
           curl -fLsS -o original.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt
 
-      - name: Check changes (hash detect)
-        id: check
+      - name: Build VPN list
         run: |
-          NEW_HASH=$(sha256sum original.txt | cut -d' ' -f1)
+          set -euo pipefail
 
-          if [ -f last_hash.txt ]; then
-            OLD_HASH=$(cat last_hash.txt)
-          else
-            OLD_HASH=""
-          fi
-
-          if [ "$NEW_HASH" = "$OLD_HASH" ]; then
-            echo "NO_CHANGE=true" >> $GITHUB_OUTPUT
-          else
-            echo "NO_CHANGE=false" >> $GITHUB_OUTPUT
-          fi
-
-          echo $NEW_HASH > last_hash.txt
-
-      - name: Stop if no changes
-        if: steps.check.outputs.NO_CHANGE == 'true'
-        run: |
-          echo "No changes → skip build"
-          exit 0
-
-      - name: Build VPN files (clean + no RU)
-        run: |
           export TZ=Europe/Moscow
           mkdir -p public
 
-          # 🔥 фикс бинарного файла
-          strings original.txt | tr -d '\r' > fixed.txt
+          # =========================
+          # FIX ENCODING / CRLF
+          # =========================
+          tr -d '\r' < original.txt > fixed.txt
 
-          # 🔥 базовая очистка
-          grep -a -v '^#' fixed.txt | grep -a -v '^$' > clean.txt
+          # =========================
+          # BASIC CLEAN
+          # =========================
+          grep -a -v '^#' fixed.txt \
+          | grep -a -v '^$' > clean.txt || true
 
-          # 🔥 убираем только #BL (не ломаем ссылки)
-          grep -vi '\[BL\]' clean.txt > no_bl.txt
+          [ -s clean.txt ] || { echo "EMPTY INPUT" > public/vpn.txt; exit 0; }
 
-          # 🔥 удаляем дубли по host:port
-          awk -F'[@#]' '{
-            if (match($0, /@([^#]+)/, m)) {
-              hp=m[1]
-              if (!seen[hp]++) print $0
-            }
-          }' no_bl.txt > unique.txt
+          # =========================
+          # REMOVE [BL] (ГАРАНТИРОВАННО)
+          # =========================
+          sed -E 's/[[:space:]]*\[BL\][[:space:]]*//g' clean.txt > no_bl.txt
 
-          # 🔥 оставляем только валидные VPN строки
-          grep -E '^vless://|^trojan://|^ss://' unique.txt \
-          | tr -d '\r' \
-          | sed 's/[[:space:]]//g' \
-          | grep -v '^$' > valid.txt
+          # =========================
+          # KEEP ONLY VPN LINKS
+          # =========================
+          grep -E '^vless://|^trojan://|^ss://' no_bl.txt > vpn_raw.txt || true
 
-          # 🔥 доп. проверка (чтобы не было мусора)
-          grep -E '://.+@.+:[0-9]+' valid.txt > validated.txt
+          [ -s vpn_raw.txt ] || { echo "NO VALID SERVERS" > public/vpn.txt; exit 0; }
 
-          # 🔥 УДАЛЯЕМ RU СЕРВЕРА (по названию)
-          grep -viE '#.*(russia|ru|moscow|spb|novosibirsk)' validated.txt > no_ru.txt
+          # =========================
+          # CLEAN SPACES
+          # =========================
+          tr -d '[:space:]' < vpn_raw.txt > vpn_clean.txt
 
-          # если после фильтра пусто
-          if [ ! -s no_ru.txt ]; then
-            echo "EMPTY LIST" > public/vpn.txt
-            echo "EMPTY LIST" > public/android.txt
-            exit 0
-          fi
+          # =========================
+          # VALIDATE FORMAT
+          # =========================
+          grep -E '://.+@.+:[0-9]+' vpn_clean.txt > validated.txt || true
 
-          # 🔥 ограничиваем список (ускоряет импорт)
+          # =========================
+          # REMOVE RU SERVERS (BY TAGS)
+          # =========================
+          grep -viE '(russia|ru|moscow|spb|novosibirsk)' validated.txt > no_ru.txt || true
+
+          [ -s no_ru.txt ] || { echo "EMPTY AFTER FILTER" > public/vpn.txt; exit 0; }
+
+          # =========================
+          # LIMIT SIZE (STABILITY)
+          # =========================
           head -n 300 no_ru.txt > limited.txt
 
-          # 🔥 перемешиваем
+          # =========================
+          # SHUFFLE
+          # =========================
           shuf limited.txt > final.txt
 
-          # Android (чистый)
-          cp final.txt public/android.txt
-
+          # =========================
+          # OUTPUT
+          # =========================
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < final.txt)
 
           {
             echo "# profile-title: 🔥MeowMeres VPN"
-            echo "# Date/Time: $DATE $TIME (Moscow)"
+            echo "# Date/Time: $DATE $TIME (MSK)"
             echo "# Servers: $COUNT"
             echo ""
             cat final.txt
           } > public/vpn.txt
+
+          cp final.txt public/android.txt
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
