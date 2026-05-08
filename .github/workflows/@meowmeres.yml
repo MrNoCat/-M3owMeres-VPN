@@ -1,4 +1,4 @@
-name: Smart VPN Stable Builder FINAL
+name: Smart VPN Stable Builder NO FAIL
 
 on:
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
       # =========================
       # BUILD
       # =========================
-      - name: Build stable VPN list
+      - name: Build VPN list
         run: |
           set -euo pipefail
           export TZ=Europe/Moscow
@@ -41,30 +41,32 @@ jobs:
           fi
 
           # =========================
-          # NORMALIZE FILE
+          # NORMALIZE (CRLF FIX)
           # =========================
           tr -d '\r' < all.txt > fixed.txt
 
           # =========================
-          # STABLE EXTRACTION (FIXED)
+          # ULTRA STABLE EXTRACT (NO FAIL)
           # =========================
-          cat fixed.txt \
-          | tr -d ' ' \
-          | grep -Eo '(vless|trojan|ss)://[^"'\'' ]+' \
+          perl -nle 'while(/(vless|trojan|ss):\/\/[^\s"'"'"<>]+/g){print $&}' fixed.txt \
+          | sed 's/[[:space:]]//g' \
           > raw.txt || true
 
+          # =========================
+          # SAFETY FALLBACK (NO EMPTY STATE EVER)
+          # =========================
           if [ ! -s raw.txt ]; then
-            echo "NO VALID VPN LINES (EXTRACT FAILED)" > public/vpn.txt
+            echo "NO VALID LINKS FOUND" > public/vpn.txt
             exit 0
           fi
 
           # =========================
-          # REMOVE TAGS SAFELY
+          # REMOVE TAGS (BL / RU / ANYCAST)
           # =========================
           sed -E 's/\[(BL|RU|ANYCAST)\]//g' raw.txt > cleaned.txt
 
           # =========================
-          # FINAL CLEAN
+          # TRIM
           # =========================
           sed 's/[[:space:]]*$//' cleaned.txt > safe.txt
 
@@ -74,22 +76,20 @@ jobs:
           grep -E '://.+@.+:[0-9]+' safe.txt > valid.txt || true
 
           if [ ! -s valid.txt ]; then
-            echo "NO VALID AFTER FILTER" > public/vpn.txt
-            exit 0
+            cp safe.txt valid.txt
           fi
 
           # =========================
-          # SOFT FILTER (DO NOT KILL LIST)
+          # FILTER RU + ANYCAST (SOFT MODE)
           # =========================
           grep -viE 'russia|moscow|spb|ru|anycast' valid.txt > filtered.txt || true
 
-          # fallback safety
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
           fi
 
           # =========================
-          # LIGHT HEALTH CHECK (SAFE MODE)
+          # LIGHT HEALTH CHECK (SAFE)
           # =========================
           > alive.txt
 
@@ -101,20 +101,15 @@ jobs:
               continue
             fi
 
-            timeout 1 bash -c "</dev/tcp/$ip/443" 2>/dev/null
-
-            if [ $? -eq 0 ]; then
-              echo "$line" >> alive.txt
-            fi
+            timeout 1 bash -c "</dev/tcp/$ip/443" 2>/dev/null && echo "$line" >> alive.txt || true
           done < filtered.txt
 
-          # fallback safety
           if [ ! -s alive.txt ]; then
             cp filtered.txt alive.txt
           fi
 
           # =========================
-          # LIMIT FOR MOBILE STABILITY
+          # LIMIT + SHUFFLE
           # =========================
           head -n 200 alive.txt > final.txt
           shuf final.txt > out.txt
