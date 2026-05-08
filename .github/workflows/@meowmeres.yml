@@ -1,4 +1,4 @@
-name: Smart VPN Builder PRO (stable-grade)
+name: Smart VPN Stable Builder
 
 on:
   workflow_dispatch:
@@ -14,112 +14,114 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download sources (2 feeds)
+      - name: Download sources
         run: |
-          curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt
-          curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt
+          curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt || true
+          curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt || true
           cat a.txt b.txt > all.txt
 
-      - name: Build stable list
+      - name: Build stable VPN list
         run: |
           set -euo pipefail
           export TZ=Europe/Moscow
           mkdir -p public
 
           # =========================
-          # NORMALIZE INPUT
+          # CHECK INPUT SAFETY
+          # =========================
+          if [ ! -s all.txt ]; then
+            echo "NO INPUT DATA" > public/vpn.txt
+            exit 0
+          fi
+
+          # =========================
+          # NORMALIZE FILE
           # =========================
           tr -d '\r' < all.txt > fixed.txt
 
-          # только валидные схемы
-          grep -E '^vless://|^trojan://|^ss://' fixed.txt > raw.txt || true
+          # =========================
+          # KEEP ONLY VPN LINES (RELAXED)
+          # =========================
+          grep -E 'vless://|trojan://|ss://' fixed.txt > raw.txt || true
 
-          [ -s raw.txt ] || {
-            echo "EMPTY INPUT" > public/vpn.txt
+          if [ ! -s raw.txt ]; then
+            echo "NO VALID VPN LINES" > public/vpn.txt
             exit 0
-          }
+          fi
 
           # =========================
-          # REMOVE OBVIOUS BAD NODES
+          # REMOVE TAGS ONLY (SAFE)
           # =========================
-          # мусор, anycast, ru-label servers
-          grep -viE 'russia|anycast|moscow|spb|ru' raw.txt > cleaned.txt || true
+          sed -E 's/\[(BL|RU|ANYCAST)\]//g' raw.txt > cleaned.txt
 
           # =========================
-          # EXTRACT IP LIST
+          # FIX WHITESPACES ONLY
           # =========================
-          grep -oE '@([0-9]{1,3}\.){3}[0-9]{1,3}' cleaned.txt \
-          | tr -d '@' > ips.txt
+          sed 's/[[:space:]]*$//' cleaned.txt > safe.txt
 
+          # =========================
+          # BASIC VALIDATION (NOT STRICT)
+          # =========================
+          grep -E '://.+@.+:[0-9]+' safe.txt > valid.txt || true
+
+          if [ ! -s valid.txt ]; then
+            echo "NO VALID AFTER FILTER" > public/vpn.txt
+            exit 0
+          fi
+
+          # =========================
+          # REMOVE RU / ANYCAST (SOFT FILTER)
+          # =========================
+          grep -viE 'russia|moscow|spb|ru|anycast' valid.txt > filtered.txt || true
+
+          # fallback if everything removed
+          if [ ! -s filtered.txt ]; then
+            cp valid.txt filtered.txt
+          fi
+
+          # =========================
+          # LIGHT HEALTH CHECK (NO KILLING ALL)
+          # =========================
           > alive.txt
 
-          # =========================
-          # LIVENESS CHECK (like VPN providers)
-          # =========================
-          while read ip; do
-            # быстрый TCP check (443)
+          while read line; do
+            ip=$(echo "$line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+
+            # если IP нет — не удаляем
+            if [ -z "$ip" ]; then
+              echo "$line" >> alive.txt
+              continue
+            fi
+
             timeout 1 bash -c "</dev/tcp/$ip/443" 2>/dev/null
 
             if [ $? -eq 0 ]; then
-              # оставляем только 1 конфиг на IP (dedup like providers)
-              grep "$ip" cleaned.txt | head -n 1 >> alive.txt || true
+              echo "$line" >> alive.txt
             fi
-          done < ips.txt
+          done < filtered.txt
 
-          [ -s alive.txt ] || {
-            echo "NO LIVE SERVERS" > public/vpn.txt
-            exit 0
-          }
-
-          # =========================
-          # STABILITY SCORING (KEY PART)
-          # =========================
-          > scored.txt
-
-          while read line; do
-            score=100
-
-            # стабильные CDN обычно лучше
-            echo "$line" | grep -qiE "cloud|cdn|edge" && score=$((score - 15))
-
-            # подозрительные/битые параметры
-            echo "$line" | grep -qE "\\\\|\"|,,|%2C%2C" && score=$((score + 20))
-
-            # reality/xtls обычно стабильнее
-            echo "$line" | grep -qi "reality" && score=$((score - 10))
-
-            # штраф за лишние параметры (нестабильные конфиги)
-            params=$(echo "$line" | grep -o "?" | wc -l)
-            [ "$params" -gt 2 ] && score=$((score + 10))
-
-            echo "$score|$line" >> scored.txt
-          done < alive.txt
+          # fallback safety
+          if [ ! -s alive.txt ]; then
+            cp filtered.txt alive.txt
+          fi
 
           # =========================
-          # SORT LIKE COMMERCIAL VPN
+          # LIMIT FOR MOBILE STABILITY
           # =========================
-          sort -n scored.txt | cut -d'|' -f2- > sorted.txt
-
-          # =========================
-          # HARD LIMIT (STABILITY)
-          # =========================
-          head -n 180 sorted.txt > final.txt
-
-          # small shuffle (load balancing)
+          head -n 200 alive.txt > final.txt
           shuf final.txt > out.txt
 
           # =========================
-          # OUTPUT FORMAT
+          # OUTPUT
           # =========================
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < out.txt)
 
           {
-            echo "# profile-title: ⚡ MeowMeres VPN"
+            echo "# profile-title: ⚡MeowMeres VPN"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: $COUNT"
-            echo "# mode: stable-grade filtering"
             echo ""
             cat out.txt
           } > public/vpn.txt
