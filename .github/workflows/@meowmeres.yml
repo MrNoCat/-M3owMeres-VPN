@@ -1,4 +1,4 @@
-name: Smart VPN Stable Builder NO FAIL
+name: "⚡MeowMeres VPN"
 
 on:
   workflow_dispatch:
@@ -17,16 +17,16 @@ jobs:
       # =========================
       # DOWNLOAD SOURCES
       # =========================
-      - name: Download sources
+      - name: Download VPN sources
         run: |
           curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt || true
           curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt || true
           cat a.txt b.txt > all.txt
 
       # =========================
-      # BUILD
+      # BUILD VPN LIST
       # =========================
-      - name: Build VPN list
+      - name: Build stable VPN list
         run: |
           set -euo pipefail
           export TZ=Europe/Moscow
@@ -41,37 +41,33 @@ jobs:
           fi
 
           # =========================
-          # NORMALIZE (CRLF FIX)
+          # NORMALIZE
           # =========================
           tr -d '\r' < all.txt > fixed.txt
 
           # =========================
-          # ULTRA STABLE EXTRACT (NO FAIL)
+          # STABLE EXTRACTION (NO CRASH)
           # =========================
-          perl -nle 'while(/(vless|trojan|ss):\/\/[^\s"'"'"<>]+/g){print $&}' fixed.txt \
-          | sed 's/[[:space:]]//g' \
-          > raw.txt || true
+          grep -Eo 'vless://[^[:space:]]+|trojan://[^[:space:]]+|ss://[^[:space:]]+' fixed.txt > raw.txt || true
 
-          # =========================
-          # SAFETY FALLBACK (NO EMPTY STATE EVER)
-          # =========================
+          # fallback safety
           if [ ! -s raw.txt ]; then
-            echo "NO VALID LINKS FOUND" > public/vpn.txt
+            echo "NO VALID VPN LINKS FOUND" > public/vpn.txt
             exit 0
           fi
 
           # =========================
-          # REMOVE TAGS (BL / RU / ANYCAST)
+          # REMOVE TAGS (SAFE)
           # =========================
           sed -E 's/\[(BL|RU|ANYCAST)\]//g' raw.txt > cleaned.txt
 
           # =========================
-          # TRIM
+          # FINAL CLEAN
           # =========================
           sed 's/[[:space:]]*$//' cleaned.txt > safe.txt
 
           # =========================
-          # VALIDATION (LIGHT)
+          # BASIC VALIDATION
           # =========================
           grep -E '://.+@.+:[0-9]+' safe.txt > valid.txt || true
 
@@ -80,20 +76,21 @@ jobs:
           fi
 
           # =========================
-          # FILTER RU + ANYCAST (SOFT MODE)
+          # FILTER RU + ANYCAST (SOFT)
           # =========================
           grep -viE 'russia|moscow|spb|ru|anycast' valid.txt > filtered.txt || true
 
+          # fallback safety
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
           fi
 
           # =========================
-          # LIGHT HEALTH CHECK (SAFE)
+          # LIGHT HEALTH CHECK (SAFE MODE)
           # =========================
           > alive.txt
 
-          while read line; do
+          while read -r line; do
             ip=$(echo "$line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
 
             if [ -z "$ip" ]; then
@@ -104,18 +101,19 @@ jobs:
             timeout 1 bash -c "</dev/tcp/$ip/443" 2>/dev/null && echo "$line" >> alive.txt || true
           done < filtered.txt
 
+          # fallback safety
           if [ ! -s alive.txt ]; then
             cp filtered.txt alive.txt
           fi
 
           # =========================
-          # LIMIT + SHUFFLE
+          # LIMIT + SHUFFLE (MOBILE FRIENDLY)
           # =========================
           head -n 200 alive.txt > final.txt
           shuf final.txt > out.txt
 
           # =========================
-          # OUTPUT
+          # OUTPUT FILE
           # =========================
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
