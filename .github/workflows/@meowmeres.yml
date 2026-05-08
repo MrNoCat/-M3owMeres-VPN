@@ -1,4 +1,4 @@
-name: Smart VPN Stable Builder PRO FIX
+name: Smart VPN Stable Builder FINAL
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
 
     steps:
       # =========================
-      # DOWNLOAD 2 SOURCES
+      # DOWNLOAD SOURCES
       # =========================
       - name: Download sources
         run: |
@@ -24,16 +24,16 @@ jobs:
           cat a.txt b.txt > all.txt
 
       # =========================
-      # BUILD LIST
+      # BUILD
       # =========================
-      - name: Build VPN list
+      - name: Build stable VPN list
         run: |
           set -euo pipefail
           export TZ=Europe/Moscow
           mkdir -p public
 
           # =========================
-          # CHECK INPUT
+          # INPUT CHECK
           # =========================
           if [ ! -s all.txt ]; then
             echo "NO INPUT DATA" > public/vpn.txt
@@ -41,14 +41,17 @@ jobs:
           fi
 
           # =========================
-          # NORMALIZE
+          # NORMALIZE FILE
           # =========================
           tr -d '\r' < all.txt > fixed.txt
 
           # =========================
-          # EXTRACT VPN LINKS (FIXED - IMPORTANT)
+          # STABLE EXTRACTION (FIXED)
           # =========================
-          grep -Eo '(vless|trojan|ss)://[^ ]+' fixed.txt > raw.txt || true
+          cat fixed.txt \
+          | tr -d ' ' \
+          | grep -Eo '(vless|trojan|ss)://[^"'\'' ]+' \
+          > raw.txt || true
 
           if [ ! -s raw.txt ]; then
             echo "NO VALID VPN LINES (EXTRACT FAILED)" > public/vpn.txt
@@ -56,27 +59,27 @@ jobs:
           fi
 
           # =========================
-          # REMOVE TAGS ONLY (SAFE)
+          # REMOVE TAGS SAFELY
           # =========================
           sed -E 's/\[(BL|RU|ANYCAST)\]//g' raw.txt > cleaned.txt
 
           # =========================
-          # TRIM SPACES ONLY
+          # FINAL CLEAN
           # =========================
           sed 's/[[:space:]]*$//' cleaned.txt > safe.txt
 
           # =========================
-          # VALIDATION (LIGHT, NOT AGGRESSIVE)
+          # VALIDATION (LIGHT)
           # =========================
           grep -E '://.+@.+:[0-9]+' safe.txt > valid.txt || true
 
           if [ ! -s valid.txt ]; then
-            echo "NO VALID AFTER CHECK" > public/vpn.txt
+            echo "NO VALID AFTER FILTER" > public/vpn.txt
             exit 0
           fi
 
           # =========================
-          # FILTER RU / ANYCAST (SOFT)
+          # SOFT FILTER (DO NOT KILL LIST)
           # =========================
           grep -viE 'russia|moscow|spb|ru|anycast' valid.txt > filtered.txt || true
 
@@ -86,7 +89,7 @@ jobs:
           fi
 
           # =========================
-          # LIGHT HEALTH CHECK (NO KILLING EVERYTHING)
+          # LIGHT HEALTH CHECK (SAFE MODE)
           # =========================
           > alive.txt
 
@@ -114,8 +117,6 @@ jobs:
           # LIMIT FOR MOBILE STABILITY
           # =========================
           head -n 200 alive.txt > final.txt
-
-          # shuffle for load balancing
           shuf final.txt > out.txt
 
           # =========================
@@ -126,7 +127,7 @@ jobs:
           COUNT=$(wc -l < out.txt)
 
           {
-            echo "# profile-title: ⚡ MeowMeres VPN"
+            echo "# profile-title: ⚡MeowMeres VPN"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: $COUNT"
             echo ""
@@ -136,7 +137,7 @@ jobs:
           cp out.txt public/android.txt
 
       # =========================
-      # UPLOAD
+      # DEPLOY
       # =========================
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
