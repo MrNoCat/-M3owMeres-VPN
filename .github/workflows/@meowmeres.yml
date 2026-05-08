@@ -25,65 +25,38 @@ jobs:
           export TZ=Europe/Moscow
           mkdir -p public
 
-          # =========================
-          # FIX ENCODING (CRLF)
-          # =========================
           tr -d '\r' < original.txt > fixed.txt
 
-          # =========================
-          # BASIC CLEAN
-          # =========================
           grep -a -v '^$' fixed.txt > clean.txt || true
 
           [ -s clean.txt ] || { echo "EMPTY INPUT" > public/vpn.txt; exit 0; }
 
-          # =========================
-          # REMOVE TAGS [BL] [RU] (SAFE)
-          # =========================
           sed -E 's/[[:space:]]*\[(BL|RU)\][[:space:]]*//g' clean.txt > no_tags.txt
 
-          # =========================
-          # KEEP ONLY VPN LINKS
-          # =========================
           grep -E '^vless://|^trojan://|^ss://' no_tags.txt > vpn_raw.txt || true
 
           [ -s vpn_raw.txt ] || { echo "NO VALID SERVERS" > public/vpn.txt; exit 0; }
 
-          # =========================
-          # CLEAN ONLY LINE BREAK ISSUES (НЕ УБИВАЕМ СТРОКУ)
-          # =========================
           sed 's/\r//g' vpn_raw.txt > vpn_clean.txt
 
-          # =========================
-          # SAFE VALIDATION (НЕ ЖЕСТКИЙ REGEX)
-          # =========================
           grep -E '://.+@.+:[0-9]+' vpn_clean.txt > validated.txt || true
 
           [ -s validated.txt ] || { echo "EMPTY AFTER VALIDATION" > public/vpn.txt; exit 0; }
 
           # =========================
-          # REMOVE RU SERVERS (ТОЛЬКО ПО ТЕГАМ)
+          # REMOVE RU + ANYCAST SERVERS (ONLY TAGS)
           # =========================
-          grep -viE '#.*(russia|moscow|spb|novosibirsk|ru)' validated.txt > filtered.txt || true
+          grep -viE '#.*(russia|moscow|spb|novosibirsk|ru|anycast)' validated.txt > filtered.txt || true
 
-          # fallback если всё удалилось
+          # fallback
           if [ ! -s filtered.txt ]; then
             cp validated.txt filtered.txt
           fi
 
-          # =========================
-          # LIMIT (STABILITY FOR MOBILE)
-          # =========================
           head -n 300 filtered.txt > limited.txt
 
-          # =========================
-          # RANDOMIZE
-          # =========================
           shuf limited.txt > final.txt
 
-          # =========================
-          # OUTPUT
-          # =========================
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < final.txt)
