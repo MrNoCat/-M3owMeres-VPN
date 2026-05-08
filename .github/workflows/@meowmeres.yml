@@ -17,16 +17,16 @@ jobs:
       # =========================
       # DOWNLOAD SOURCES
       # =========================
-      - name: Download VPN sources
+      - name: Download VPN configs
         run: |
           curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt || true
           curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt || true
           cat a.txt b.txt > all.txt
 
       # =========================
-      # BUILD VPN LIST
+      # BUILD
       # =========================
-      - name: Build stable VPN list
+      - name: Build VPN list (stable)
         run: |
           set -euo pipefail
           export TZ=Europe/Moscow
@@ -46,9 +46,11 @@ jobs:
           tr -d '\r' < all.txt > fixed.txt
 
           # =========================
-          # STABLE EXTRACTION (NO CRASH)
+          # ULTRA STABLE EXTRACT (IMPORTANT FIX)
           # =========================
-          grep -Eo 'vless://[^[:space:]]+|trojan://[^[:space:]]+|ss://[^[:space:]]+' fixed.txt > raw.txt || true
+          perl -pe 's/\\//g' fixed.txt \
+          | grep -Eo '(vless|trojan|ss):\/\/[^[:space:]"'"'"<>]+' \
+          > raw.txt || true
 
           # fallback safety
           if [ ! -s raw.txt ]; then
@@ -57,7 +59,7 @@ jobs:
           fi
 
           # =========================
-          # REMOVE TAGS (SAFE)
+          # CLEAN TAGS
           # =========================
           sed -E 's/\[(BL|RU|ANYCAST)\]//g' raw.txt > cleaned.txt
 
@@ -80,13 +82,12 @@ jobs:
           # =========================
           grep -viE 'russia|moscow|spb|ru|anycast' valid.txt > filtered.txt || true
 
-          # fallback safety
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
           fi
 
           # =========================
-          # LIGHT HEALTH CHECK (SAFE MODE)
+          # LIGHT HEALTH CHECK (SAFE)
           # =========================
           > alive.txt
 
@@ -101,19 +102,18 @@ jobs:
             timeout 1 bash -c "</dev/tcp/$ip/443" 2>/dev/null && echo "$line" >> alive.txt || true
           done < filtered.txt
 
-          # fallback safety
           if [ ! -s alive.txt ]; then
             cp filtered.txt alive.txt
           fi
 
           # =========================
-          # LIMIT + SHUFFLE (MOBILE FRIENDLY)
+          # LIMIT + SHUFFLE (MOBILE OPTIMIZED)
           # =========================
           head -n 200 alive.txt > final.txt
           shuf final.txt > out.txt
 
           # =========================
-          # OUTPUT FILE
+          # OUTPUT FILES
           # =========================
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
@@ -130,7 +130,7 @@ jobs:
           cp out.txt public/android.txt
 
       # =========================
-      # DEPLOY
+      # DEPLOY TO GITHUB PAGES
       # =========================
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
