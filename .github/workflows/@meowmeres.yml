@@ -1,4 +1,4 @@
-name: Smart VPN Stable Builder
+name: Smart VPN Stable Builder PRO FIX
 
 on:
   workflow_dispatch:
@@ -14,20 +14,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # =========================
+      # DOWNLOAD 2 SOURCES
+      # =========================
       - name: Download sources
         run: |
           curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt || true
           curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt || true
           cat a.txt b.txt > all.txt
 
-      - name: Build stable VPN list
+      # =========================
+      # BUILD LIST
+      # =========================
+      - name: Build VPN list
         run: |
           set -euo pipefail
           export TZ=Europe/Moscow
           mkdir -p public
 
           # =========================
-          # CHECK INPUT SAFETY
+          # CHECK INPUT
           # =========================
           if [ ! -s all.txt ]; then
             echo "NO INPUT DATA" > public/vpn.txt
@@ -35,17 +41,17 @@ jobs:
           fi
 
           # =========================
-          # NORMALIZE FILE
+          # NORMALIZE
           # =========================
           tr -d '\r' < all.txt > fixed.txt
 
           # =========================
-          # KEEP ONLY VPN LINES (RELAXED)
+          # EXTRACT VPN LINKS (FIXED - IMPORTANT)
           # =========================
-          grep -E 'vless://|trojan://|ss://' fixed.txt > raw.txt || true
+          grep -Eo '(vless|trojan|ss)://[^ ]+' fixed.txt > raw.txt || true
 
           if [ ! -s raw.txt ]; then
-            echo "NO VALID VPN LINES" > public/vpn.txt
+            echo "NO VALID VPN LINES (EXTRACT FAILED)" > public/vpn.txt
             exit 0
           fi
 
@@ -55,39 +61,38 @@ jobs:
           sed -E 's/\[(BL|RU|ANYCAST)\]//g' raw.txt > cleaned.txt
 
           # =========================
-          # FIX WHITESPACES ONLY
+          # TRIM SPACES ONLY
           # =========================
           sed 's/[[:space:]]*$//' cleaned.txt > safe.txt
 
           # =========================
-          # BASIC VALIDATION (NOT STRICT)
+          # VALIDATION (LIGHT, NOT AGGRESSIVE)
           # =========================
           grep -E '://.+@.+:[0-9]+' safe.txt > valid.txt || true
 
           if [ ! -s valid.txt ]; then
-            echo "NO VALID AFTER FILTER" > public/vpn.txt
+            echo "NO VALID AFTER CHECK" > public/vpn.txt
             exit 0
           fi
 
           # =========================
-          # REMOVE RU / ANYCAST (SOFT FILTER)
+          # FILTER RU / ANYCAST (SOFT)
           # =========================
           grep -viE 'russia|moscow|spb|ru|anycast' valid.txt > filtered.txt || true
 
-          # fallback if everything removed
+          # fallback safety
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
           fi
 
           # =========================
-          # LIGHT HEALTH CHECK (NO KILLING ALL)
+          # LIGHT HEALTH CHECK (NO KILLING EVERYTHING)
           # =========================
           > alive.txt
 
           while read line; do
             ip=$(echo "$line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
 
-            # если IP нет — не удаляем
             if [ -z "$ip" ]; then
               echo "$line" >> alive.txt
               continue
@@ -109,6 +114,8 @@ jobs:
           # LIMIT FOR MOBILE STABILITY
           # =========================
           head -n 200 alive.txt > final.txt
+
+          # shuffle for load balancing
           shuf final.txt > out.txt
 
           # =========================
@@ -119,7 +126,7 @@ jobs:
           COUNT=$(wc -l < out.txt)
 
           {
-            echo "# profile-title: ⚡MeowMeres VPN"
+            echo "# profile-title: ⚡ MeowMeres VPN"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: $COUNT"
             echo ""
@@ -128,7 +135,10 @@ jobs:
 
           cp out.txt public/android.txt
 
-      - name: Upload Pages
+      # =========================
+      # UPLOAD
+      # =========================
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: public
