@@ -1,4 +1,4 @@
-name: VPN Auto Detect Build (STABLE FIX)
+name: Smart VPN Builder PRO (stable-grade)
 
 on:
   workflow_dispatch:
@@ -14,64 +14,119 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download source
+      - name: Download sources (2 feeds)
         run: |
-          curl -fLsS -o original.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt
+          curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt
+          curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt
+          cat a.txt b.txt > all.txt
 
-      - name: Build VPN list
+      - name: Build stable list
         run: |
           set -euo pipefail
-
           export TZ=Europe/Moscow
           mkdir -p public
 
-          tr -d '\r' < original.txt > fixed.txt
+          # =========================
+          # NORMALIZE INPUT
+          # =========================
+          tr -d '\r' < all.txt > fixed.txt
 
-          grep -a -v '^$' fixed.txt > clean.txt || true
+          # только валидные схемы
+          grep -E '^vless://|^trojan://|^ss://' fixed.txt > raw.txt || true
 
-          [ -s clean.txt ] || { echo "EMPTY INPUT" > public/vpn.txt; exit 0; }
-
-          sed -E 's/[[:space:]]*\[(BL|RU)\][[:space:]]*//g' clean.txt > no_tags.txt
-
-          grep -E '^vless://|^trojan://|^ss://' no_tags.txt > vpn_raw.txt || true
-
-          [ -s vpn_raw.txt ] || { echo "NO VALID SERVERS" > public/vpn.txt; exit 0; }
-
-          sed 's/\r//g' vpn_raw.txt > vpn_clean.txt
-
-          grep -E '://.+@.+:[0-9]+' vpn_clean.txt > validated.txt || true
-
-          [ -s validated.txt ] || { echo "EMPTY AFTER VALIDATION" > public/vpn.txt; exit 0; }
+          [ -s raw.txt ] || {
+            echo "EMPTY INPUT" > public/vpn.txt
+            exit 0
+          }
 
           # =========================
-          # REMOVE RU + ANYCAST SERVERS (ONLY TAGS)
+          # REMOVE OBVIOUS BAD NODES
           # =========================
-          grep -viE '#.*(russia|moscow|spb|novosibirsk|ru|anycast)' validated.txt > filtered.txt || true
+          # мусор, anycast, ru-label servers
+          grep -viE 'russia|anycast|moscow|spb|ru' raw.txt > cleaned.txt || true
 
-          # fallback
-          if [ ! -s filtered.txt ]; then
-            cp validated.txt filtered.txt
-          fi
+          # =========================
+          # EXTRACT IP LIST
+          # =========================
+          grep -oE '@([0-9]{1,3}\.){3}[0-9]{1,3}' cleaned.txt \
+          | tr -d '@' > ips.txt
 
-          head -n 300 filtered.txt > limited.txt
+          > alive.txt
 
-          shuf limited.txt > final.txt
+          # =========================
+          # LIVENESS CHECK (like VPN providers)
+          # =========================
+          while read ip; do
+            # быстрый TCP check (443)
+            timeout 1 bash -c "</dev/tcp/$ip/443" 2>/dev/null
 
+            if [ $? -eq 0 ]; then
+              # оставляем только 1 конфиг на IP (dedup like providers)
+              grep "$ip" cleaned.txt | head -n 1 >> alive.txt || true
+            fi
+          done < ips.txt
+
+          [ -s alive.txt ] || {
+            echo "NO LIVE SERVERS" > public/vpn.txt
+            exit 0
+          }
+
+          # =========================
+          # STABILITY SCORING (KEY PART)
+          # =========================
+          > scored.txt
+
+          while read line; do
+            score=100
+
+            # стабильные CDN обычно лучше
+            echo "$line" | grep -qiE "cloud|cdn|edge" && score=$((score - 15))
+
+            # подозрительные/битые параметры
+            echo "$line" | grep -qE "\\\\|\"|,,|%2C%2C" && score=$((score + 20))
+
+            # reality/xtls обычно стабильнее
+            echo "$line" | grep -qi "reality" && score=$((score - 10))
+
+            # штраф за лишние параметры (нестабильные конфиги)
+            params=$(echo "$line" | grep -o "?" | wc -l)
+            [ "$params" -gt 2 ] && score=$((score + 10))
+
+            echo "$score|$line" >> scored.txt
+          done < alive.txt
+
+          # =========================
+          # SORT LIKE COMMERCIAL VPN
+          # =========================
+          sort -n scored.txt | cut -d'|' -f2- > sorted.txt
+
+          # =========================
+          # HARD LIMIT (STABILITY)
+          # =========================
+          head -n 180 sorted.txt > final.txt
+
+          # small shuffle (load balancing)
+          shuf final.txt > out.txt
+
+          # =========================
+          # OUTPUT FORMAT
+          # =========================
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
-          COUNT=$(wc -l < final.txt)
+          COUNT=$(wc -l < out.txt)
 
           {
-            echo "# profile-title: 🔥MeowMeres VPN"
-            echo "# Date/Time: $DATE $TIME (MSK)"
-            echo "# Servers: $COUNT"
+            echo "# profile-title: ⚡ MeowMeres VPN"
+            echo "# update: $DATE $TIME (MSK)"
+            echo "# servers: $COUNT"
+            echo "# mode: stable-grade filtering"
             echo ""
-            cat final.txt
+            cat out.txt
           } > public/vpn.txt
 
-          cp final.txt public/android.txt
+          cp out.txt public/android.txt
 
-      - name: Upload Pages artifact
+      - name: Upload Pages
         uses: actions/upload-pages-artifact@v4
         with:
           path: public
