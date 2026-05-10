@@ -1,4 +1,4 @@
-name: "⚡MeowMeres VPN"
+name: VPN Auto Detect Build (STABLE FIX)
 
 on:
   workflow_dispatch:
@@ -14,177 +14,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download VPN configs
-        shell: bash
+      - name: Download source
         run: |
-          set -euo pipefail
-
-          if ! curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt; then
-            : > a.txt
-          fi
-
-          if ! curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt; then
-            : > b.txt
-          fi
-
-          cat a.txt b.txt > all.txt
-
+          curl -fLsS -o original.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt
       - name: Build VPN list
-        shell: bash
         run: |
           set -euo pipefail
           export TZ=Europe/Moscow
           mkdir -p public
-
-          if [ ! -s all.txt ]; then
-            echo "NO INPUT DATA" > public/vpn.txt
-            cp public/vpn.txt public/white-list.txt
-            cp public/vpn.txt public/android.txt
-            cat > public/index.html <<'EOF'
-            <!doctype html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <title>⚡MeowMeres VPN</title>
-            </head>
-            <body>
-              <h1>⚡MeowMeres VPN</h1>
-              <p>No data yet.</p>
-            </body>
-            </html>
-EOF
-            exit 0
+          tr -d '\r' < original.txt > fixed.txt
+          grep -a -v '^$' fixed.txt > clean.txt || true
+          [ -s clean.txt ] || { echo "EMPTY INPUT" > public/vpn.txt; exit 0; }
+          sed -E 's/[[:space:]]*\[(BL|RU)\][[:space:]]*//g' clean.txt > no_tags.txt
+          grep -E '^vless://|^trojan://|^ss://' no_tags.txt > vpn_raw.txt || true
+          [ -s vpn_raw.txt ] || { echo "NO VALID SERVERS" > public/vpn.txt; exit 0; }
+          sed 's/\r//g' vpn_raw.txt > vpn_clean.txt
+          grep -E '://.+@.+:[0-9]+' vpn_clean.txt > validated.txt || true
+          [ -s validated.txt ] || { echo "EMPTY AFTER VALIDATION" > public/vpn.txt; exit 0; }
+          # =========================
+          # REMOVE RU + ANYCAST SERVERS (ONLY TAGS)
+          # =========================
+          grep -viE '#.*(russia|moscow|spb|novosibirsk|ru|anycast)' validated.txt > filtered.txt || true
+          # fallback
+          if [ ! -s filtered.txt ]; then
+            cp validated.txt filtered.txt
           fi
-
-          tr -d '\r' < all.txt > fixed.txt
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          import random
-          import socket
-          from urllib.parse import urlsplit
-          from concurrent.futures import ThreadPoolExecutor, as_completed
-
-          text = Path("fixed.txt").read_text(encoding="utf-8", errors="ignore")
-          text = text.replace("\\", "")
-          text = text.replace("\r", "")
-
-          pattern = re.compile(r'(?:vless|trojan|ss)://[^\s"\'<>]+', re.IGNORECASE)
-          links = []
-          seen = set()
-
-          for m in pattern.finditer(text):
-              link = m.group(0).strip().rstrip('),;]')
-              if not link:
-                  continue
-
-              if re.search(r'#.*(?:Russia|Anycast|BL|RU)', link, re.IGNORECASE):
-                  continue
-              if re.search(r'\[(?:BL|RU|ANYCAST)\]', link, re.IGNORECASE):
-                  continue
-
-              if link not in seen:
-                  seen.add(link)
-                  links.append(link)
-
-          def host_port(link: str):
-              try:
-                  p = urlsplit(link)
-                  host = p.hostname
-                  port = p.port or 443
-                  if not host:
-                      return None
-                  return f"{host}:{port}"
-              except Exception:
-                  return None
-
-          dedup_hp = []
-          seen_hp = set()
-          for link in links:
-              hp = host_port(link)
-              if hp is None:
-                  dedup_hp.append(link)
-                  continue
-              if hp not in seen_hp:
-                  seen_hp.add(hp)
-                  dedup_hp.append(link)
-
-          # limit before health-check so the job stays fast
-          candidates = dedup_hp[:250]
-
-          def alive(link: str):
-              try:
-                  p = urlsplit(link)
-                  host = p.hostname
-                  port = p.port or 443
-                  if not host:
-                      return None
-                  with socket.create_connection((host, port), timeout=1.2):
-                      return link
-              except Exception:
-                  return None
-
-          alive_links = []
-          with ThreadPoolExecutor(max_workers=20) as ex:
-              futures = [ex.submit(alive, link) for link in candidates]
-              for fut in as_completed(futures):
-                  res = fut.result()
-                  if res:
-                      alive_links.append(res)
-
-          if not alive_links:
-              alive_links = candidates if candidates else dedup_hp if dedup_hp else links
-
-          if not alive_links:
-              Path("public/vpn.txt").write_text("NO VALID VPN LINKS FOUND\n", encoding="utf-8")
-              Path("public/white-list.txt").write_text("NO VALID VPN LINKS FOUND\n", encoding="utf-8")
-              Path("public/android.txt").write_text("NO VALID VPN LINKS FOUND\n", encoding="utf-8")
-              Path("public/index.html").write_text("""<!doctype html><html><head><meta charset="utf-8"><title>⚡MeowMeres VPN</title></head><body><h1>⚡MeowMeres VPN</h1><p>No valid links found.</p></body></html>""", encoding="utf-8")
-              raise SystemExit(0)
-
-          reality = [l for l in alive_links if "security=reality" in l.lower() and "xtls-rprx-vision" in l.lower()]
-          rest = [l for l in alive_links if l not in reality]
-
-          random.shuffle(reality)
-          random.shuffle(rest)
-
-          final = (reality + rest)[:150]
-
-          date = __import__("datetime").datetime.now().strftime("%d.%m.%Y")
-          time = __import__("datetime").datetime.now().strftime("%H:%M")
-          count = len(final)
-
-          header = [
-              "# profile-title: ⚡MeowMeres VPN",
-              f"# update: {date} {time} (MSK)",
-              f"# servers: {count}",
-              "# optimized: Happ / V2rayTun",
-              ""
-          ]
-
-          content = "\n".join(header + final) + "\n"
-
-          Path("public/vpn.txt").write_text(content, encoding="utf-8")
-          Path("public/white-list.txt").write_text(content, encoding="utf-8")
-          Path("public/android.txt").write_text("\n".join(final) + ("\n" if final else ""), encoding="utf-8")
-
-          Path("public/index.html").write_text(f"""<!doctype html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <title>⚡MeowMeres VPN</title>
-          </head>
-          <body>
-            <h1>⚡MeowMeres VPN</h1>
-            <p><a href="./vpn.txt">vpn.txt</a></p>
-            <p><a href="./white-list.txt">white-list.txt</a></p>
-            <p><a href="./android.txt">android.txt</a></p>
-          </body>
-          </html>
-          """, encoding="utf-8")
-          PY
-
+          head -n 300 filtered.txt > limited.txt
+          shuf limited.txt > final.txt
+          DATE=$(date +"%d.%m.%Y")
+          TIME=$(date +"%H:%M")
+          COUNT=$(wc -l < final.txt)
+          {
+            echo "# profile-title: 🔥MeowMeres VPN"
+            echo "# Date/Time: $DATE $TIME (MSK)"
+            echo "# Servers: $COUNT"
+            echo ""
+            cat final.txt
+          } > public/vpn.txt
+          cp final.txt public/android.txt
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
@@ -202,5 +69,5 @@ EOF
       name: github-pages
 
     steps:
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         uses: actions/deploy-pages@v4
