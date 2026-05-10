@@ -1,4 +1,4 @@
-name: VPN Auto Detect Build (STABLE FIX)
+name: "⚡MeowMeres VPN"
 
 on:
   workflow_dispatch:
@@ -14,44 +14,88 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download source
+      # =========================
+      # DOWNLOAD SOURCES
+      # =========================
+      - name: Download VPN sources
         run: |
-          curl -fLsS -o original.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt
+          set +e
+
+          curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt
+          curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt
+
+          touch a.txt b.txt
+          cat a.txt b.txt > all.txt
+
+      # =========================
+      # BUILD LIST
+      # =========================
       - name: Build VPN list
         run: |
-          set -euo pipefail
+          set -eo pipefail
           export TZ=Europe/Moscow
+
           mkdir -p public
-          tr -d '\r' < original.txt > fixed.txt
-          grep -a -v '^$' fixed.txt > clean.txt || true
-          [ -s clean.txt ] || { echo "EMPTY INPUT" > public/vpn.txt; exit 0; }
-          sed -E 's/[[:space:]]*\[(BL|RU)\][[:space:]]*//g' clean.txt > no_tags.txt
-          grep -E '^vless://|^trojan://|^ss://' no_tags.txt > vpn_raw.txt || true
-          [ -s vpn_raw.txt ] || { echo "NO VALID SERVERS" > public/vpn.txt; exit 0; }
-          sed 's/\r//g' vpn_raw.txt > vpn_clean.txt
-          grep -E '://.+@.+:[0-9]+' vpn_clean.txt > validated.txt || true
-          [ -s validated.txt ] || { echo "EMPTY AFTER VALIDATION" > public/vpn.txt; exit 0; }
-          # =========================
-          # REMOVE RU + ANYCAST SERVERS (ONLY TAGS)
-          # =========================
-          grep -viE '#.*(russia|moscow|spb|novosibirsk|ru|anycast)' validated.txt > filtered.txt || true
-          # fallback
-          if [ ! -s filtered.txt ]; then
-            cp validated.txt filtered.txt
+
+          # CHECK INPUT
+          if [ ! -s all.txt ]; then
+            echo "NO INPUT DATA" > public/vpn.txt
+            exit 0
           fi
-          head -n 300 filtered.txt > limited.txt
-          shuf limited.txt > final.txt
+
+          # NORMALIZE
+          tr -d '\r' < all.txt > fixed.txt
+
+          # EXTRACT LINKS
+          grep -aEo '(vless|trojan|ss)://[^[:space:]]+' fixed.txt > raw.txt || true
+
+          if [ ! -s raw.txt ]; then
+            echo "NO VALID LINKS FOUND" > public/vpn.txt
+            exit 0
+          fi
+
+          # REMOVE TAGS
+          sed -E 's/\[(RU|BL|ANYCAST)\]//g' raw.txt > cleaned.txt
+
+          # REMOVE DUPLICATES
+          awk '!seen[$0]++' cleaned.txt > unique.txt
+
+          # VALIDATION
+          grep -aE '://.+@.+:[0-9]+' unique.txt > valid.txt || true
+
+          if [ ! -s valid.txt ]; then
+            cp unique.txt valid.txt
+          fi
+
+          # FILTER ONLY BAD TAGS (SAFE)
+          grep -aviE '#.*(russia|anycast)' valid.txt > filtered.txt || true
+
+          if [ ! -s filtered.txt ]; then
+            cp valid.txt filtered.txt
+          fi
+
+          # SHUFFLE + LIMIT
+          shuf filtered.txt | head -n 250 > out.txt
+
+          # FINAL OUTPUT
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
-          COUNT=$(wc -l < final.txt)
+          COUNT=$(wc -l < out.txt)
+
           {
-            echo "# profile-title: 🔥MeowMeres VPN"
-            echo "# Date/Time: $DATE $TIME (MSK)"
-            echo "# Servers: $COUNT"
+            echo "# profile-title: ⚡MeowMeres VPN"
+            echo "# update: $DATE $TIME (MSK)"
+            echo "# servers: $COUNT"
             echo ""
-            cat final.txt
+
+            cat out.txt
           } > public/vpn.txt
-          cp final.txt public/android.txt
+
+          cp out.txt public/android.txt
+
+      # =========================
+      # DEPLOY
+      # =========================
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
