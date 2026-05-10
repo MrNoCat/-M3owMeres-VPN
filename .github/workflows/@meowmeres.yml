@@ -1,4 +1,4 @@
-name: "⚡MeowMeres VPN Premium Stable"
+name: "⚡MeowMeres VPN"
 
 on:
   workflow_dispatch:
@@ -123,10 +123,9 @@ jobs:
           COUNT=$(wc -l < out.txt)
 
           {
-            echo "# profile-title: ⚡MeowMeres VPN Premium Stable"
+            echo "# profile-title: ⚡MeowMeres VPN"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: $COUNT"
-            echo "# mode: stable-premium"
             echo ""
 
             cat out.txt
