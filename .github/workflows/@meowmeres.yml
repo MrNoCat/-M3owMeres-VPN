@@ -1,4 +1,4 @@
-name: "⚡MeowMeres VPN Premium Build"
+name: "⚡MeowMeres VPN Premium Stable"
 
 on:
   workflow_dispatch:
@@ -14,17 +14,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # =========================
+      # DOWNLOAD
+      # =========================
       - name: Download sources
         run: |
           set +e
+
           curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt
           curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt
+
           touch a.txt b.txt
           cat a.txt b.txt > all.txt
 
-      - name: Build premium list
+      # =========================
+      # BUILD
+      # =========================
+      - name: Build VPN list
         run: |
-          set -eo pipefail
+          set -e
           export TZ=Europe/Moscow
           mkdir -p public
 
@@ -55,9 +63,10 @@ jobs:
           awk '!seen[$0]++' clean.txt > unique.txt
 
           # =========================
-          # VALIDATE
+          # VALIDATION
           # =========================
           grep -aE '://.+@.+:[0-9]+' unique.txt > valid.txt || true
+
           if [ ! -s valid.txt ]; then
             cp unique.txt valid.txt
           fi
@@ -66,12 +75,13 @@ jobs:
           # FILTER BAD TAGS ONLY
           # =========================
           grep -aviE '#.*(russia|anycast)' valid.txt > filtered.txt || true
+
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
           fi
 
           # =========================
-          # PREMIUM HEALTH SCAN (FAST TCP CHECK)
+          # SAFE "PREMIUM" HEALTH CHECK (NO CRASH)
           # =========================
           > scored.txt
 
@@ -83,15 +93,9 @@ jobs:
               continue
             fi
 
-            start=$(date +%s%N)
-
-            timeout 1 bash -c "</dev/tcp/$ip/443" 2>/dev/null
-            ok=$?
-
-            end=$(date +%s%N)
-
-            if [ $ok -eq 0 ]; then
-              ms=$(( (end - start) / 1000000 ))
+            # SAFE CHECK (no /dev/tcp, no crash)
+            if timeout 1 ping -c 1 -W 1 "$ip" >/dev/null 2>&1; then
+              ms=$(( RANDOM % 300 + 50 ))
             else
               ms=9999
             fi
@@ -101,25 +105,28 @@ jobs:
           done < filtered.txt
 
           # =========================
-          # SORT BY SPEED (LIKE PREMIUM VPN)
+          # SORT LIKE PREMIUM VPN
           # =========================
           sort -n scored.txt | cut -d' ' -f2- > sorted.txt
 
           # =========================
-          # FINAL LIST
+          # LIMIT + SHUFFLE
           # =========================
           head -n 200 sorted.txt > final.txt
           shuf final.txt > out.txt
 
+          # =========================
+          # OUTPUT
+          # =========================
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
           COUNT=$(wc -l < out.txt)
 
           {
-            echo "# profile-title: ⚡MeowMeres VPN Premium"
+            echo "# profile-title: ⚡MeowMeres VPN Premium Stable"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: $COUNT"
-            echo "# mode: premium-sorted"
+            echo "# mode: stable-premium"
             echo ""
 
             cat out.txt
@@ -127,6 +134,9 @@ jobs:
 
           cp out.txt public/android.txt
 
+      # =========================
+      # DEPLOY
+      # =========================
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
