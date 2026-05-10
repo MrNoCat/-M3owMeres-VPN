@@ -19,17 +19,21 @@ jobs:
       # =========================
       - name: Download VPN configs
         run: |
-          curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt || true
-          curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt || true
+          set +e
+
+          curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt
+          curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt
+
           cat a.txt b.txt > all.txt
 
       # =========================
-      # BUILD
+      # BUILD VPN LIST
       # =========================
-      - name: Build VPN list (stable)
+      - name: Build VPN lists
         run: |
-          set -euo pipefail
+          set +e
           export TZ=Europe/Moscow
+
           mkdir -p public
 
           # =========================
@@ -46,52 +50,81 @@ jobs:
           tr -d '\r' < all.txt > fixed.txt
 
           # =========================
-          # ULTRA STABLE EXTRACT (IMPORTANT FIX)
+          # EXTRACT VPN LINKS
           # =========================
           perl -pe 's/\\//g' fixed.txt \
           | grep -Eo '(vless|trojan|ss):\/\/[^[:space:]"'"'"<>]+' \
           > raw.txt || true
 
-          # fallback safety
+          # fallback
           if [ ! -s raw.txt ]; then
+            cp fixed.txt raw.txt
+          fi
+
+          # =========================
+          # REMOVE EMPTY
+          # =========================
+          sed -i '/^$/d' raw.txt
+
+          # =========================
+          # KEEP ONLY VPN TYPES
+          # =========================
+          grep -E '^(vless|trojan|ss)://' raw.txt > vpn.txt || true
+
+          if [ ! -s vpn.txt ]; then
             echo "NO VALID VPN LINKS FOUND" > public/vpn.txt
             exit 0
           fi
 
           # =========================
-          # CLEAN TAGS
+          # REMOVE RU + ANYCAST
           # =========================
-          sed -E 's/\[(BL|RU|ANYCAST)\]//g' raw.txt > cleaned.txt
+          grep -viE 'Russia|Anycast' vpn.txt > filtered.txt || true
 
-          # =========================
-          # FINAL CLEAN
-          # =========================
-          sed 's/[[:space:]]*$//' cleaned.txt > safe.txt
-
-          # =========================
-          # BASIC VALIDATION
-          # =========================
-          grep -E '://.+@.+:[0-9]+' safe.txt > valid.txt || true
-
-          if [ ! -s valid.txt ]; then
-            cp safe.txt valid.txt
-          fi
-
-          # =========================
-          # FILTER RU + ANYCAST (SOFT)
-          # =========================
-          grep -viE 'russia|moscow|spb|ru|anycast' valid.txt > filtered.txt || true
-
+          # fallback if empty
           if [ ! -s filtered.txt ]; then
-            cp valid.txt filtered.txt
+            cp vpn.txt filtered.txt
           fi
 
           # =========================
-          # LIGHT HEALTH CHECK (SAFE)
+          # REMOVE BAD TAGS
+          # =========================
+          sed -E 's/\[(BL|RU|ANYCAST)\]//g' filtered.txt > clean.txt
+
+          # =========================
+          # REMOVE DUPLICATES (IP:PORT)
+          # =========================
+          awk -F'[@#]' '
+          {
+            if (match($0, /@([^#]+)/)) {
+              hp=substr($0,RSTART+1,RLENGTH-1)
+              if (!seen[hp]++) print
+            }
+          }' clean.txt > unique.txt
+
+          # fallback
+          if [ ! -s unique.txt ]; then
+            cp clean.txt unique.txt
+          fi
+
+          # =========================
+          # REALITY PRIORITY
+          # =========================
+          grep 'security=reality' unique.txt | grep 'xtls-rprx-vision' > reality.txt || true
+
+          if [ -s reality.txt ]; then
+            cp reality.txt premium.txt
+          else
+            cp unique.txt premium.txt
+          fi
+
+          # =========================
+          # HEALTH CHECK
           # =========================
           > alive.txt
 
           while read -r line; do
+
             ip=$(echo "$line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
 
             if [ -z "$ip" ]; then
@@ -99,44 +132,84 @@ jobs:
               continue
             fi
 
-            timeout 1 bash -c "</dev/tcp/$ip/443" 2>/dev/null && echo "$line" >> alive.txt || true
-          done < filtered.txt
+            timeout 2 bash -c "</dev/tcp/$ip/443" 2>/dev/null \
+            && echo "$line" >> alive.txt \
+            || true
 
+          done < premium.txt
+
+          # fallback
           if [ ! -s alive.txt ]; then
-            cp filtered.txt alive.txt
+            cp premium.txt alive.txt
           fi
 
           # =========================
-          # LIMIT + SHUFFLE (MOBILE OPTIMIZED)
+          # LIMIT FOR MOBILE
           # =========================
-          head -n 200 alive.txt > final.txt
-          shuf final.txt > out.txt
+          head -n 150 alive.txt > limited.txt
 
           # =========================
-          # OUTPUT FILES
+          # RANDOMIZE
+          # =========================
+          shuf limited.txt > final.txt
+
+          # =========================
+          # FINAL CLEAN
+          # =========================
+          sed -i '/^$/d' final.txt
+
+          # =========================
+          # INFO
           # =========================
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
-          COUNT=$(wc -l < out.txt)
+          COUNT=$(wc -l < final.txt)
 
+          # =========================
+          # BUILD OUTPUT
+          # =========================
           {
             echo "# profile-title: ⚡MeowMeres VPN"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: $COUNT"
+            echo "# optimized: Happ / V2rayTun"
             echo ""
-            cat out.txt
+
+            cat final.txt
+
           } > public/vpn.txt
 
-          cp out.txt public/android.txt
+          cp final.txt public/android.txt
+
+          # =========================
+          # INDEX.HTML FOR GITHUB PAGES
+          # =========================
+          cat > public/index.html <<EOF
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>⚡MeowMeres VPN</title>
+          </head>
+          <body>
+            <h1>⚡MeowMeres VPN</h1>
+            <a href="./vpn.txt">vpn.txt</a><br>
+            <a href="./android.txt">android.txt</a>
+          </body>
+          </html>
+          EOF
 
       # =========================
-      # DEPLOY TO GITHUB PAGES
+      # UPLOAD
       # =========================
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: public
 
+  # =========================
+  # DEPLOY
+  # =========================
   deploy:
     needs: build
     runs-on: ubuntu-latest
