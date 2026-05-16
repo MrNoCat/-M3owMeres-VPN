@@ -6,99 +6,195 @@ on:
     - cron: "*/30 * * * *"
 
 permissions:
+  contents: read
   pages: write
   id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download sources
+      # =====================================
+      # CHECKOUT
+      # =====================================
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # =====================================
+      # DOWNLOAD SOURCES
+      # =====================================
+      - name: Download VPN sources
+        shell: bash
         run: |
-          set +e
+          set -Eeuo pipefail
 
-          curl -fLsS -o a.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt
-          curl -fLsS -o b.txt https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt
+          mkdir -p work public
 
-          touch a.txt b.txt
-          cat a.txt b.txt > all.txt
+          SOURCES=(
+            "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS%2BAll_RUS.txt"
+            "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt"
+          )
 
-      - name: Build VPN list
-        run: |
-          set -e
-          export TZ=Europe/Moscow
-          mkdir -p public
+          > work/all.txt
 
-          if [ ! -s all.txt ]; then
-            echo "NO INPUT DATA" > public/vpn.txt
-            exit 0
+          for url in "${SOURCES[@]}"; do
+            echo "Downloading: $url"
+
+            if curl -fL --connect-timeout 10 --max-time 30 -s "$url" >> work/all.txt; then
+              echo "" >> work/all.txt
+              echo "OK"
+            else
+              echo "FAILED: $url"
+            fi
+          done
+
+          if [ ! -s work/all.txt ]; then
+            echo "No source data downloaded!"
+            exit 1
           fi
 
+      # =====================================
+      # BUILD VPN LIST
+      # =====================================
+      - name: Build VPN list
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          export TZ=Europe/Moscow
+
+          cd work
+
+          # -------------------------
+          # NORMALIZE
+          # -------------------------
           tr -d '\r' < all.txt > fixed.txt
 
-          grep -aEo '(vless|trojan|ss)://[^[:space:]]+' fixed.txt > raw.txt || true
+          # -------------------------
+          # EXTRACT LINKS
+          # -------------------------
+          grep -aEo '(vless|vmess|trojan|ss)://[^[:space:]]+' fixed.txt > raw.txt || true
 
           if [ ! -s raw.txt ]; then
-            echo "NO LINKS FOUND" > public/vpn.txt
+            echo "NO LINKS FOUND" > ../public/vpn.txt
             exit 0
           fi
 
-          sed -E 's/\[(RU|BL|ANYCAST)\]//g' raw.txt > clean.txt
+          # -------------------------
+          # CLEAN TAGS
+          # -------------------------
+          sed -E \
+            -e 's/\[(RU|BL|ANYCAST)\]//g' \
+            -e 's/[[:space:]]+$//' \
+            raw.txt > clean.txt
+
+          # -------------------------
+          # REMOVE DUPLICATES
+          # -------------------------
           awk '!seen[$0]++' clean.txt > unique.txt
 
-          grep -aE '://.+@.+:[0-9]+' unique.txt > valid.txt || true
+          # -------------------------
+          # FILTER INVALID
+          # -------------------------
+          grep -aE '^(vless|vmess|trojan|ss)://' unique.txt > valid.txt || true
 
           if [ ! -s valid.txt ]; then
             cp unique.txt valid.txt
           fi
 
-          grep -aviE '#.*(russia|anycast)' valid.txt > filtered.txt || true
+          # -------------------------
+          # REMOVE BAD TAGS
+          # -------------------------
+          grep -aviE '#.*(blocked|expired|test)' valid.txt > filtered.txt || true
 
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
           fi
 
+          # -------------------------
+          # SCORE SERVERS
+          # -------------------------
           > scored.txt
 
-          while read -r line; do
-            ip=$(echo "$line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+          while IFS= read -r line; do
 
-            if [ -z "$ip" ]; then
-              echo "9999 $line" >> scored.txt
+            host=$(echo "$line" | \
+              grep -oP '@\K([^:/?#]+)' | \
+              head -n 1 || true)
+
+            if [ -z "${host:-}" ]; then
+              echo "9999|$line" >> scored.txt
               continue
             fi
 
-            if timeout 1 ping -c 1 -W 1 "$ip" >/dev/null 2>&1; then
-              ms=$(( RANDOM % 300 + 50 ))
+            # Resolve domain if needed
+            if [[ "$host" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+              target="$host"
             else
-              ms=9999
+              target=$(getent ahostsv4 "$host" | awk '{print $1}' | head -n 1 || true)
             fi
 
-            echo "$ms $line" >> scored.txt
+            if [ -z "${target:-}" ]; then
+              echo "9999|$line" >> scored.txt
+              continue
+            fi
+
+            # Ping test
+            if timeout 2 ping -c 1 -W 1 "$target" >/dev/null 2>&1; then
+              latency=$(ping -c 1 -W 1 "$target" 2>/dev/null | \
+                grep 'time=' | \
+                sed -E 's/.*time=([0-9.]+).*/\1/' | \
+                cut -d'.' -f1 || true)
+
+              latency=${latency:-999}
+            else
+              latency=9999
+            fi
+
+            echo "${latency}|${line}" >> scored.txt
 
           done < filtered.txt
 
-          sort -n scored.txt | cut -d' ' -f2- > sorted.txt
+          # -------------------------
+          # SORT BY LATENCY
+          # -------------------------
+          sort -t'|' -n -k1 scored.txt | cut -d'|' -f2- > sorted.txt
 
+          # -------------------------
+          # LIMIT SERVERS
+          # -------------------------
           head -n 200 sorted.txt > final.txt
-          shuf final.txt > out.txt
+
+          COUNT=$(wc -l < final.txt)
 
           DATE=$(date +"%d.%m.%Y")
           TIME=$(date +"%H:%M")
-          COUNT=$(wc -l < out.txt)
 
+          # -------------------------
+          # CREATE OUTPUT
+          # -------------------------
           {
             echo "# profile-title: ⚡MeowMeres VPN"
+            echo "# profile-update-interval: 30"
+            echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: $COUNT"
             echo ""
 
-            cat out.txt
-          } > public/vpn.txt
+            cat final.txt
 
-          cp out.txt public/android.txt
+          } > ../public/vpn.txt
 
+          cp final.txt ../public/android.txt
+
+      # =====================================
+      # UPLOAD ARTIFACT
+      # =====================================
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
@@ -106,6 +202,7 @@ jobs:
 
   deploy:
     needs: build
+
     runs-on: ubuntu-latest
 
     permissions:
@@ -114,7 +211,9 @@ jobs:
 
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - name: Deploy
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
