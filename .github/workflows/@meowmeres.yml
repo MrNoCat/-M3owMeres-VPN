@@ -140,7 +140,7 @@ jobs:
           # CLEAN TAGS
           # -------------------------
           sed -E \
-            -e 's/\[(RU|BL|ANYCAST|TEST)\]//g' \
+            -e 's/\[(RUSSIA|BL|ANYCAST)\]//g' \
             -e 's/[[:space:]]+$//' \
             raw.txt > clean.txt
 
