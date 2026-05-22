@@ -393,7 +393,7 @@ jobs:
 
           {
             echo "# profile-title: ⚡MeowMeres VPN"
-            echo "# profile-update-interval: 30"
+            echo "# profile-update-interval: 1"
             echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: $COUNT"
