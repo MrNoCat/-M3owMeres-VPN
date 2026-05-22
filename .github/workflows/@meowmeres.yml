@@ -61,7 +61,6 @@ jobs:
           : > work/all.txt
 
           for url in "${SOURCES[@]}"; do
-
             echo "====================================="
             echo "Downloading: $url"
 
@@ -89,7 +88,6 @@ jobs:
             fi
 
             rm -f "$tmpfile"
-
           done
 
           if [ ! -s work/all.txt ]; then
@@ -127,22 +125,25 @@ jobs:
           grep -aEo '(vless|vmess|trojan|ss)://[^[:space:]]+' safe.txt > raw.txt || true
 
           if [ ! -s raw.txt ]; then
-
             cat > ../public/vpn.txt <<EOF
           # profile-title: ⚡MeowMeres VPN
           # NO LINKS FOUND
           EOF
-
             exit 0
           fi
 
           # -------------------------
-          # CLEAN TAGS
+          # REMOVE ANYCAST + CLEAN TAGS
           # -------------------------
+          grep -aviE \
+            '(anycast|proxyip|cdn-cgi|workers\.dev|pages\.dev|cloudflare|cf-ipfs)' \
+            raw.txt | \
           sed -E \
-            -e 's/\[(RUSSIA|BL|ANYCAST)\]//g' \
+            -e 's/\[(RUSSIA|BL|ANYCAST)\]//gi' \
+            -e 's/%5BBL%5D//gi' \
+            -e 's/%5BANYCAST%5D//gi' \
             -e 's/[[:space:]]+$//' \
-            raw.txt > clean.txt
+            > clean.txt
 
           # -------------------------
           # REMOVE DUPLICATES
@@ -157,7 +158,9 @@ jobs:
           # -------------------------
           # REMOVE BAD WORDS
           # -------------------------
-          grep -aviE '(expired|blocked|spam|localhost|127\.0\.0\.1)' valid.txt > filtered.txt || true
+          grep -aviE \
+            '(expired|blocked|spam|localhost|127\.0\.0\.1)' \
+            valid.txt > filtered.txt || true
 
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
@@ -184,7 +187,7 @@ jobs:
                 payload_fixed="${payload_fixed}$(printf '=%.0s' $(seq 1 $((4 - mod))))"
               fi
 
-              if timeout 3 bash -c "printf '%s' '$payload_fixed' | base64 -d > /tmp/vmess.json" 2>/dev/null; then
+              if printf '%s' "$payload_fixed" | timeout 3 base64 -d > /tmp/vmess.json 2>/dev/null; then
 
                 if timeout 3 jq empty /tmp/vmess.json >/dev/null 2>&1; then
                   echo "$line" >> checked.txt
@@ -239,7 +242,6 @@ jobs:
           score_server() {
 
             local line="$1"
-            local proto
             local host
             local port
             local target
@@ -248,8 +250,6 @@ jobs:
             local latency
             local score
             local port_extract
-
-            proto="${line%%://*}"
 
             host=""
             port="443"
@@ -383,6 +383,7 @@ jobs:
           # HISTORY
           # -------------------------
           echo "$(date +"%Y-%m-%d %H:%M")|$COUNT" >> history.log
+
           tail -n 100 history.log > ../public/history.log
 
           # -------------------------
