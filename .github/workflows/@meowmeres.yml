@@ -3,7 +3,7 @@ name: "⚡MeowMeres VPN"
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0 */12 * * *"   # изменено на 12 часов
 
 permissions:
   contents: read
@@ -20,22 +20,14 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      # =====================================
-      # CHECKOUT
-      # =====================================
       - name: Checkout
         uses: actions/checkout@v4
 
-      # =====================================
-      # INSTALL DEPENDENCIES
-      # =====================================
       - name: Install dependencies
         shell: bash
         run: |
           set -Eeuo pipefail
-
           sudo apt-get update
-
           sudo apt-get install -y \
             jq \
             netcat-openbsd \
@@ -43,378 +35,201 @@ jobs:
             openssl \
             gzip
 
-      # =====================================
-      # DOWNLOAD SOURCES
-      # =====================================
       - name: Download VPN sources
         shell: bash
         run: |
           set -Eeuo pipefail
-
           mkdir -p work public tmp
-
           SOURCES=(
             "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt"
             "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt"
           )
-
           : > work/all.txt
-
           for url in "${SOURCES[@]}"; do
-            echo "====================================="
             echo "Downloading: $url"
-
             tmpfile="$(mktemp)"
-
-            if curl \
-              --silent \
-              --show-error \
-              --fail \
-              --location \
-              --retry 5 \
-              --retry-delay 2 \
-              --connect-timeout 10 \
-              --max-time 60 \
-              "$url" \
-              -o "$tmpfile"; then
-
+            if curl --silent --show-error --fail --location --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 60 "$url" -o "$tmpfile"; then
               head -c 20M "$tmpfile" >> work/all.txt
               echo "" >> work/all.txt
-
               echo "SUCCESS"
-
             else
               echo "::warning::Failed to download $url"
             fi
-
             rm -f "$tmpfile"
           done
-
           if [ ! -s work/all.txt ]; then
             echo "::error::No source data downloaded"
             exit 1
           fi
 
-      # =====================================
-      # BUILD VPN LIST
-      # =====================================
-      - name: Build VPN list
+      - name: Build VPN list (3 servers only)
         shell: bash
         run: |
           set -Eeuo pipefail
-
           export TZ=Europe/Moscow
-
           cd work
 
           MAX_SCORE=999999
 
-          # -------------------------
-          # NORMALIZE
-          # -------------------------
+          # Нормализация
           tr -d '\r' < all.txt > fixed.txt
-
-          # -------------------------
-          # LIMIT LINE LENGTH
-          # -------------------------
           awk 'length($0) < 10000' fixed.txt > safe.txt
 
-          # -------------------------
-          # EXTRACT LINKS
-          # -------------------------
-          grep -aEo '(vless|vmess|trojan|ss)://[^[:space:]]+' safe.txt > raw.txt || true
-
+          # Извлекаем только vless
+          grep -aEo 'vless://[^[:space:]]+' safe.txt > raw.txt || true
           if [ ! -s raw.txt ]; then
-            cat > ../public/vpn.txt <<EOF
-          # profile-title: ⚡MeowMeres VPN
-          # NO LINKS FOUND
-          EOF
+            echo "NO VLESS FOUND" > ../public/tcp.txt
+            echo "NO VLESS FOUND" > ../public/xhttp.txt
+            echo "NO VLESS FOUND" > ../public/grpc.txt
             exit 0
           fi
 
-          # -------------------------
-          # REMOVE ANYCAST + CLEAN TAGS
-          # -------------------------
-          grep -aviE \
-            '(anycast|proxyip|cdn-cgi|workers\.dev|pages\.dev|cloudflare|cf-ipfs)' \
-            raw.txt | \
-          sed -E \
-            -e 's/\[(RUSSIA|BL|ANYCAST)\]//gi' \
-            -e 's/%5BBL%5D//gi' \
-            -e 's/%5BANYCAST%5D//gi' \
-            -e 's/[[:space:]]+$//' \
-            > clean.txt
+          # Удаляем мусорные теги (anycast и т.п.)
+          grep -aviE '(anycast|proxyip|cdn-cgi|workers\.dev|pages\.dev|cloudflare|cf-ipfs)' raw.txt | \
+            sed -E -e 's/\[(RUSSIA|BL|ANYCAST)\]//gi' -e 's/%5BBL%5D//gi' -e 's/%5BANYCAST%5D//gi' -e 's/[[:space:]]+$//' > clean.txt
 
-          # -------------------------
-          # REMOVE DUPLICATES
-          # -------------------------
+          # Убираем дубли
           awk '!seen[$0]++' clean.txt > unique.txt
 
-          # -------------------------
-          # VALID LINKS ONLY
-          # -------------------------
-          grep -aE '^(vless|vmess|trojan|ss)://' unique.txt > valid.txt || true
-
-          # -------------------------
-          # REMOVE BAD WORDS
-          # -------------------------
-          grep -aviE \
-            '(expired|blocked|spam|localhost|127\.0\.0\.1)' \
-            valid.txt > filtered.txt || true
-
+          # Оставляем только корректные vless
+          grep -aE '^vless://' unique.txt > valid.txt || true
+          grep -aviE '(expired|blocked|spam|localhost|127\.0\.0\.1)' valid.txt > filtered.txt || true
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
           fi
 
-          # -------------------------
-          # VMESS VALIDATION
-          # -------------------------
-          : > checked.txt
-
-          while IFS= read -r line; do
-
-            proto="${line%%://*}"
-
-            if [ "$proto" = "vmess" ]; then
-
-              payload="${line#vmess://}"
-
-              payload_fixed="$(printf '%s' "$payload" | tr '_-' '/+')"
-
-              mod=$(( ${#payload_fixed} % 4 ))
-
-              if [ "$mod" -ne 0 ]; then
-                payload_fixed="${payload_fixed}$(printf '=%.0s' $(seq 1 $((4 - mod))))"
-              fi
-
-              if printf '%s' "$payload_fixed" | timeout 3 base64 -d > /tmp/vmess.json 2>/dev/null; then
-
-                if timeout 3 jq empty /tmp/vmess.json >/dev/null 2>&1; then
-                  echo "$line" >> checked.txt
-                fi
-
-              fi
-
-            else
-              echo "$line" >> checked.txt
-            fi
-
-          done < filtered.txt
-
-          if [ ! -s checked.txt ]; then
-            cp filtered.txt checked.txt
-          fi
-
-          # -------------------------
-          # EXTRACT UNIQUE HOSTS
-          # -------------------------
-          awk '
-          {
-            if (match($0, /^[a-z]+:\/\/([^@]+@)?([^:\/?#]+)/, a)) {
+          # Извлекаем уникальные хосты для DNS
+          awk '{
+            if (match($0, /^vless:\/\/([^@]+@)?([^:\/?#]+)/, a)) {
               print a[2]
             }
-          }
-          ' checked.txt | sort -u > hosts.txt
+          }' filtered.txt | sort -u > hosts.txt
 
-          # -------------------------
-          # DNS CACHE
-          # -------------------------
+          # DNS кэш
           : > dns_cache.txt
-
           while IFS= read -r host; do
-
             if [[ "$host" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
               echo "$host|$host" >> dns_cache.txt
               continue
             fi
-
             ip="$(timeout 5 getent ahostsv4 "$host" | awk '{print $1}' | head -n1 || true)"
-
             if [ -n "${ip:-}" ]; then
               echo "$host|$ip" >> dns_cache.txt
             fi
-
           done < hosts.txt
 
-          # -------------------------
-          # SCORE FUNCTION
-          # -------------------------
+          # Функция скоринга (как у тебя)
           score_server() {
-
             local line="$1"
-            local host
-            local port
-            local target
-            local start
-            local end
-            local latency
-            local score
-            local port_extract
-
+            local host port target start end latency score port_extract
             host=""
             port="443"
-
-            host="$(printf '%s\n' "$line" | \
-              sed -nE 's#^[a-z]+://([^@]+@)?([^:/?#]+).*#\2#p' | \
-              head -n1)"
-
-            port_extract="$(printf '%s\n' "$line" | \
-              sed -nE 's#.*:([0-9]{2,5})([/?#].*)?$#\1#p' | \
-              head -n1)"
-
+            host="$(printf '%s\n' "$line" | sed -nE 's#^vless://([^@]+@)?([^:/?#]+).*#\2#p' | head -n1)"
+            port_extract="$(printf '%s\n' "$line" | sed -nE 's#.*:([0-9]{2,5})([/?#].*)?$#\1#p' | head -n1)"
             if [ -n "${port_extract:-}" ]; then
               port="$port_extract"
             fi
-
             if [ -z "${host:-}" ]; then
               echo "${MAX_SCORE}|$line"
               return
             fi
-
             target="$(awk -F'|' -v h="$host" '$1==h {print $2}' dns_cache.txt | head -n1 || true)"
-
             if [ -z "${target:-}" ]; then
               echo "${MAX_SCORE}|$line"
               return
             fi
-
             start="$(date +%s%3N)"
-
-            if timeout 5 openssl s_client \
-              -connect "$target:$port" \
-              -servername "$host" \
-              </dev/null >/dev/null 2>&1; then
-
+            if timeout 5 openssl s_client -connect "$target:$port" -servername "$host" </dev/null >/dev/null 2>&1; then
               end="$(date +%s%3N)"
-
               latency=$((end - start))
-
               if [ "$latency" -le 0 ]; then
                 latency=1
               fi
-
             else
               latency="$MAX_SCORE"
             fi
-
             score="$latency"
-
+            # Бонусы за технологии
             if printf '%s\n' "$line" | grep -qi 'reality'; then
               score=$((score - 30))
             fi
-
             if printf '%s\n' "$line" | grep -qi 'grpc'; then
               score=$((score - 15))
             fi
-
             if printf '%s\n' "$line" | grep -qi 'tls'; then
               score=$((score - 10))
             fi
-
             if printf '%s\n' "$line" | grep -qi 'ws'; then
               score=$((score - 5))
             fi
-
             if [ "$port" = "443" ]; then
               score=$((score - 10))
             fi
-
             if [ "$score" -lt 1 ]; then
               score=1
             fi
-
             echo "${score}|${line}"
           }
-
           export MAX_SCORE
           export -f score_server
 
+          # Сканируем все строки, получаем score
           : > scored.txt
-
           while IFS= read -r line; do
             printf '%s\0' "$line"
-          done < checked.txt | \
+          done < filtered.txt | \
             xargs -0 -P 20 -I {} bash -c 'score_server "$1"' _ "{}" \
             >> scored.txt
 
-          # -------------------------
-          # SORT
-          # -------------------------
-          sort -t'|' -n -k1 scored.txt | \
-            cut -d'|' -f2- > sorted.txt
+          # Сортируем по score (меньше = быстрее)
+          sort -t'|' -n -k1 scored.txt | cut -d'|' -f2- > sorted.txt
 
-          # -------------------------
-          # FINAL LIMIT
-          # -------------------------
-          head -n 200 sorted.txt > final.txt
-
-          COUNT="$(wc -l < final.txt)"
-
+          # Теперь выбираем только нужные локации и типы
+          LOCATIONS="Frankfurt Finland Italy Netherlands"
+          TYPES="tcp xhttp grpc"
           DATE="$(date +"%d.%m.%Y")"
           TIME="$(date +"%H:%M")"
 
-          # -------------------------
-          # METADATA
-          # -------------------------
-          VLESS="$(grep -c '^vless://' final.txt || true)"
-          VMESS="$(grep -c '^vmess://' final.txt || true)"
-          TROJAN="$(grep -c '^trojan://' final.txt || true)"
-          SS="$(grep -c '^ss://' final.txt || true)"
+          # Для каждого типа ищем лучший (первый в отсортированном списке) среди локаций
+          for PROTO in $TYPES; do
+            # Собираем строки, где есть и локация, и тип
+            > candidates.txt
+            for LOC in $LOCATIONS; do
+              grep -i "$LOC" sorted.txt | grep -i "$PROTO" >> candidates.txt || true
+            done
 
-          TMP_META="$(mktemp)"
+            # Берём первую строку (она уже отсортирована по скорости)
+            BEST="$(head -n 1 candidates.txt || true)"
 
-          cat > "$TMP_META" <<EOF
-          {
-            "name": "MeowMeres VPN",
-            "updated": "$DATE $TIME",
-            "servers": $COUNT,
-            "protocols": {
-              "vless": $VLESS,
-              "vmess": $VMESS,
-              "trojan": $TROJAN,
-              "ss": $SS
-            }
-          }
-          EOF
+            # Формируем файл
+            TITLE="🚀 MeowMere VPN $(echo $PROTO | tr 'a-z' 'A-Z')"
+            if [ -n "$BEST" ]; then
+              {
+                echo "# profile-title: $TITLE"
+                echo "# profile-update-interval: 12"
+                echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
+                echo "# update: $DATE $TIME (MSK)"
+                echo "# servers: 1"
+                echo ""
+                echo "$BEST"
+              } > ../public/${PROTO}.txt
+            else
+              echo "# profile-title: $TITLE" > ../public/${PROTO}.txt
+              echo "# NO SERVER FOUND" >> ../public/${PROTO}.txt
+            fi
+          done
 
-          mv "$TMP_META" ../public/meta.json
+          # Копируем для совместимости (можно оставить)
+          cp ../public/tcp.txt ../public/vpn.txt 2>/dev/null || true
+          cp ../public/tcp.txt ../public/android.txt 2>/dev/null || true
 
-          # -------------------------
-          # HISTORY
-          # -------------------------
-          echo "$(date +"%Y-%m-%d %H:%M")|$COUNT" >> history.log
-
-          tail -n 100 history.log > ../public/history.log
-
-          # -------------------------
-          # CREATE OUTPUT
-          # -------------------------
-          TMP_VPN="$(mktemp)"
-
-          {
-            echo "# profile-title: ⚡MeowMeres VPN"
-            echo "# profile-update-interval: 1"
-            echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
-            echo "# update: $DATE $TIME (MSK)"
-            echo "# servers: $COUNT"
-            echo ""
-
-            cat final.txt
-
-          } > "$TMP_VPN"
-
-          mv "$TMP_VPN" ../public/vpn.txt
-
-          cp final.txt ../public/android.txt
-
-          gzip -fk ../public/vpn.txt
-          gzip -fk ../public/android.txt
+          # Сжимаем
+          gzip -fk ../public/tcp.txt || true
+          gzip -fk ../public/xhttp.txt || true
+          gzip -fk ../public/grpc.txt || true
 
           sync
 
-      # =====================================
-      # UPLOAD ARTIFACT
-      # =====================================
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
@@ -422,17 +237,13 @@ jobs:
 
   deploy:
     needs: build
-
     runs-on: ubuntu-latest
-
     permissions:
       pages: write
       id-token: write
-
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
