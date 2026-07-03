@@ -3,7 +3,7 @@ name: "⚡MeowMeres VPN"
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */12 * * *"   # изменено на 12 часов
+    - cron: "0 */12 * * *"
 
 permissions:
   contents: read
@@ -62,7 +62,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build VPN list (3 servers only)
+      - name: Build VPN list (3 fastest servers)
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -84,7 +84,7 @@ jobs:
             exit 0
           fi
 
-          # Удаляем мусорные теги (anycast и т.п.)
+          # Удаляем мусорные теги
           grep -aviE '(anycast|proxyip|cdn-cgi|workers\.dev|pages\.dev|cloudflare|cf-ipfs)' raw.txt | \
             sed -E -e 's/\[(RUSSIA|BL|ANYCAST)\]//gi' -e 's/%5BBL%5D//gi' -e 's/%5BANYCAST%5D//gi' -e 's/[[:space:]]+$//' > clean.txt
 
@@ -118,7 +118,7 @@ jobs:
             fi
           done < hosts.txt
 
-          # Функция скоринга (как у тебя)
+          # Функция скоринга
           score_server() {
             local line="$1"
             local host port target start end latency score port_extract
@@ -184,42 +184,65 @@ jobs:
           # Сортируем по score (меньше = быстрее)
           sort -t'|' -n -k1 scored.txt | cut -d'|' -f2- > sorted.txt
 
-          # Теперь выбираем только нужные локации и типы
-          LOCATIONS="Frankfurt Finland Italy Netherlands"
-          TYPES="tcp xhttp grpc"
+          # Теперь выбираем 3 сервера: TCP, XHTTP, gRPC (самые быстрые в каждой категории)
           DATE="$(date +"%d.%m.%Y")"
           TIME="$(date +"%H:%M")"
 
-          # Для каждого типа ищем лучший (первый в отсортированном списке) среди локаций
-          for PROTO in $TYPES; do
-            # Собираем строки, где есть и локация, и тип
-            > candidates.txt
-            for LOC in $LOCATIONS; do
-              grep -i "$LOC" sorted.txt | grep -i "$PROTO" >> candidates.txt || true
-            done
+          # Ищем TCP (reality и tcp)
+          grep -iE '(tcp|reality)' sorted.txt | grep -viE '(grpc|xhttp|ws)' > tcp_candidates.txt || true
+          TCP="$(head -n 1 tcp_candidates.txt || echo "")"
 
-            # Берём первую строку (она уже отсортирована по скорости)
-            BEST="$(head -n 1 candidates.txt || true)"
+          # Ищем XHTTP (reality и xhttp)
+          grep -iE '(xhttp|http)' sorted.txt | grep -viE '(grpc|tcp)' > xhttp_candidates.txt || true
+          XHTTP="$(head -n 1 xhttp_candidates.txt || echo "")"
 
-            # Формируем файл
-            TITLE="🚀 MeowMere VPN $(echo $PROTO | tr 'a-z' 'A-Z')"
-            if [ -n "$BEST" ]; then
-              {
-                echo "# profile-title: $TITLE"
-                echo "# profile-update-interval: 12"
-                echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
-                echo "# update: $DATE $TIME (MSK)"
-                echo "# servers: 1"
-                echo ""
-                echo "$BEST"
-              } > ../public/${PROTO}.txt
-            else
-              echo "# profile-title: $TITLE" > ../public/${PROTO}.txt
-              echo "# NO SERVER FOUND" >> ../public/${PROTO}.txt
-            fi
-          done
+          # Ищем gRPC (reality и grpc)
+          grep -iE 'grpc' sorted.txt | grep -viE '(tcp|xhttp|ws)' > grpc_candidates.txt || true
+          GRPC="$(head -n 1 grpc_candidates.txt || echo "")"
 
-          # Копируем для совместимости (можно оставить)
+          # Если какой-то не найден - ищем любой reality без привязки к типу
+          if [ -z "$TCP" ]; then
+            TCP="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
+          fi
+          if [ -z "$XHTTP" ]; then
+            XHTTP="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
+          fi
+          if [ -z "$GRPC" ]; then
+            GRPC="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
+          fi
+
+          # Формируем файлы
+          {
+            echo "# profile-title: 🚀 MeowMere VPN TCP"
+            echo "# profile-update-interval: 12"
+            echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
+            echo "# update: $DATE $TIME (MSK)"
+            echo "# servers: 1"
+            echo ""
+            if [ -n "$TCP" ]; then echo "$TCP"; else echo "NO TCP SERVER FOUND"; fi
+          } > ../public/tcp.txt
+
+          {
+            echo "# profile-title: 🚀 MeowMere VPN XHTTP"
+            echo "# profile-update-interval: 12"
+            echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
+            echo "# update: $DATE $TIME (MSK)"
+            echo "# servers: 1"
+            echo ""
+            if [ -n "$XHTTP" ]; then echo "$XHTTP"; else echo "NO XHTTP SERVER FOUND"; fi
+          } > ../public/xhttp.txt
+
+          {
+            echo "# profile-title: 🚀 MeowMere VPN gRPC"
+            echo "# profile-update-interval: 12"
+            echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
+            echo "# update: $DATE $TIME (MSK)"
+            echo "# servers: 1"
+            echo ""
+            if [ -n "$GRPC" ]; then echo "$GRPC"; else echo "NO GRPC SERVER FOUND"; fi
+          } > ../public/grpc.txt
+
+          # Копируем для совместимости
           cp ../public/tcp.txt ../public/vpn.txt 2>/dev/null || true
           cp ../public/tcp.txt ../public/android.txt 2>/dev/null || true
 
