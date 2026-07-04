@@ -62,7 +62,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build VPN list (3 servers together)
+      - name: Build VPN list (3 servers with names)
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -78,8 +78,7 @@ jobs:
           # Извлекаем только vless
           grep -aEo 'vless://[^[:space:]]+' safe.txt > raw.txt || true
           if [ ! -s raw.txt ]; then
-            echo "# profile-title: 🚀 MeowMere VPN" > ../public/vpn.txt
-            echo "# NO VLESS FOUND" >> ../public/vpn.txt
+            echo "NO VLESS FOUND" > ../public/vpn.txt
             exit 0
           fi
 
@@ -148,7 +147,6 @@ jobs:
               latency="$MAX_SCORE"
             fi
             score="$latency"
-            # Бонусы за технологии
             if printf '%s\n' "$line" | grep -qi 'reality'; then
               score=$((score - 30))
             fi
@@ -183,23 +181,23 @@ jobs:
           # Сортируем по score (меньше = быстрее)
           sort -t'|' -n -k1 scored.txt | cut -d'|' -f2- > sorted.txt
 
-          # Выбираем 3 сервера: TCP, XHTTP, gRPC (самые быстрые в каждой категории)
+          # Выбираем 3 сервера
           DATE="$(date +"%d.%m.%Y")"
           TIME="$(date +"%H:%M")"
 
-          # TCP (reality + tcp или просто reality без grpc/xhttp)
+          # TCP
           grep -iE '(tcp|reality)' sorted.txt | grep -viE '(grpc|xhttp|ws)' > tcp_candidates.txt || true
           TCP="$(head -n 1 tcp_candidates.txt || echo "")"
 
-          # XHTTP (reality + xhttp)
+          # XHTTP
           grep -iE '(xhttp|http)' sorted.txt | grep -viE '(grpc|tcp|ws)' > xhttp_candidates.txt || true
           XHTTP="$(head -n 1 xhttp_candidates.txt || echo "")"
 
-          # gRPC (reality + grpc)
+          # gRPC
           grep -iE 'grpc' sorted.txt | grep -viE '(tcp|xhttp|ws)' > grpc_candidates.txt || true
           GRPC="$(head -n 1 grpc_candidates.txt || echo "")"
 
-          # Fallback: если какой-то не найден - берём любой reality
+          # Fallback
           if [ -z "$TCP" ]; then
             TCP="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
@@ -210,7 +208,27 @@ jobs:
             GRPC="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
 
-          # Формируем ОДИН файл с тремя серверами
+          # Добавляем названия в ссылки через параметр remark
+          add_remark() {
+            local link="$1"
+            local name="$2"
+            if [ -z "$link" ]; then
+              echo ""
+              return
+            fi
+            # Если в ссылке уже есть ? — добавляем &remark, иначе ?remark
+            if echo "$link" | grep -q '?'; then
+              echo "${link}&remark=$(echo "$name" | sed 's/ /%20/g')"
+            else
+              echo "${link}?remark=$(echo "$name" | sed 's/ /%20/g')"
+            fi
+          }
+
+          TCP_NAMED="$(add_remark "$TCP" "🚀 MeowMere VPN TCP")"
+          XHTTP_NAMED="$(add_remark "$XHTTP" "🚀 MeowMere VPN XHTTP")"
+          GRPC_NAMED="$(add_remark "$GRPC" "🚀 MeowMere VPN gRPC")"
+
+          # Формируем ОДИН файл только со ссылками (для Happ)
           {
             echo "# profile-title: 🚀 MeowMere VPN"
             echo "# profile-update-interval: 12"
@@ -218,17 +236,12 @@ jobs:
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: 3"
             echo ""
-            echo "# 🚀 MeowMere VPN TCP"
-            if [ -n "$TCP" ]; then echo "$TCP"; else echo "# NO TCP SERVER"; fi
-            echo ""
-            echo "# 🚀 MeowMere VPN XHTTP"
-            if [ -n "$XHTTP" ]; then echo "$XHTTP"; else echo "# NO XHTTP SERVER"; fi
-            echo ""
-            echo "# 🚀 MeowMere VPN gRPC"
-            if [ -n "$GRPC" ]; then echo "$GRPC"; else echo "# NO GRPC SERVER"; fi
+            if [ -n "$TCP_NAMED" ]; then echo "$TCP_NAMED"; fi
+            if [ -n "$XHTTP_NAMED" ]; then echo "$XHTTP_NAMED"; fi
+            if [ -n "$GRPC_NAMED" ]; then echo "$GRPC_NAMED"; fi
           } > ../public/vpn.txt
 
-          # Копируем для совместимости
+          # Копируем
           cp ../public/vpn.txt ../public/android.txt 2>/dev/null || true
 
           # Сжимаем
