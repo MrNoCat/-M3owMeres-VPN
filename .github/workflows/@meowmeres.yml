@@ -71,39 +71,34 @@ jobs:
 
           MAX_SCORE=999999
 
-          # Нормализация
           tr -d '\r' < all.txt > fixed.txt
           awk 'length($0) < 10000' fixed.txt > safe.txt
 
-          # Извлекаем только vless
           grep -aEo 'vless://[^[:space:]]+' safe.txt > raw.txt || true
           if [ ! -s raw.txt ]; then
-            echo "NO VLESS FOUND" > ../public/vpn.txt
+            echo "# profile-title: 🐈 MeowMeres VPN" > ../public/vpn.txt
+            echo "# profile-update-interval: 720" >> ../public/vpn.txt
+            echo "# NO VLESS FOUND" >> ../public/vpn.txt
             exit 0
           fi
 
-          # Удаляем мусорные теги
           grep -aviE '(anycast|proxyip|cdn-cgi|workers\.dev|pages\.dev|cloudflare|cf-ipfs)' raw.txt | \
             sed -E -e 's/\[(RUSSIA|BL|ANYCAST)\]//gi' -e 's/%5BBL%5D//gi' -e 's/%5BANYCAST%5D//gi' -e 's/[[:space:]]+$//' > clean.txt
 
-          # Убираем дубли
           awk '!seen[$0]++' clean.txt > unique.txt
 
-          # Оставляем только корректные vless
           grep -aE '^vless://' unique.txt > valid.txt || true
           grep -aviE '(expired|blocked|spam|localhost|127\.0\.0\.1)' valid.txt > filtered.txt || true
           if [ ! -s filtered.txt ]; then
             cp valid.txt filtered.txt
           fi
 
-          # Извлекаем уникальные хосты для DNS
           awk '{
             if (match($0, /^vless:\/\/([^@]+@)?([^:\/?#]+)/, a)) {
               print a[2]
             }
           }' filtered.txt | sort -u > hosts.txt
 
-          # DNS кэш
           : > dns_cache.txt
           while IFS= read -r host; do
             if [[ "$host" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
@@ -116,7 +111,6 @@ jobs:
             fi
           done < hosts.txt
 
-          # Функция скоринга
           score_server() {
             local line="$1"
             local host port target start end latency score port_extract
@@ -170,7 +164,6 @@ jobs:
           export MAX_SCORE
           export -f score_server
 
-          # Сканируем все строки, получаем score
           : > scored.txt
           while IFS= read -r line; do
             printf '%s\0' "$line"
@@ -178,26 +171,16 @@ jobs:
             xargs -0 -P 20 -I {} bash -c 'score_server "$1"' _ "{}" \
             >> scored.txt
 
-          # СОРТИРУЕМ по score (меньше = быстрее)
           sort -t'|' -n -k1 scored.txt | cut -d'|' -f2- > sorted.txt
 
-          # ============================================================
-          # ВЫБИРАЕМ САМЫЕ БЫСТРЫЕ СЕРВЕРА ИЗ ОТСОРТИРОВАННОГО СПИСКА
-          # sorted.txt уже отсортирован - первый = самый быстрый
-          # ============================================================
           DATE="$(date +"%d.%m.%Y")"
           TIME="$(date +"%H:%M")"
 
-          # TCP - берём первый подходящий из ОТСОРТИРОВАННОГО списка
+          # Выбираем самые быстрые из отсортированного списка
           TCP="$(grep -iE '(tcp|reality)' sorted.txt | grep -viE '(grpc|xhttp|ws)' | head -n 1 || echo "")"
-
-          # XHTTP - берём первый подходящий из ОТСОРТИРОВАННОГО списка
           XHTTP="$(grep -iE '(xhttp|http)' sorted.txt | grep -viE '(grpc|tcp|ws)' | head -n 1 || echo "")"
-
-          # gRPC - берём первый подходящий из ОТСОРТИРОВАННОГО списка
           GRPC="$(grep -iE 'grpc' sorted.txt | grep -viE '(tcp|xhttp|ws)' | head -n 1 || echo "")"
 
-          # Fallback: если какой-то не найден - берём любой самый быстрый reality
           if [ -z "$TCP" ]; then
             TCP="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
@@ -208,7 +191,6 @@ jobs:
             GRPC="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
 
-          # Функция добавления названия через remark
           add_remark() {
             local link="$1"
             local name="$2"
@@ -223,31 +205,29 @@ jobs:
             fi
           }
 
-          # Формируем файлы с названиями через case
           for PROTO in tcp xhttp grpc; do
             case "$PROTO" in
               tcp)
-                TITLE="🚀 MeowMere VPN TCP"
+                TITLE="🐈 MeowMeres VPN TCP"
                 LINK="$TCP"
                 ;;
               xhttp)
-                TITLE="🚀 MeowMere VPN XHTTP"
+                TITLE="🐈 MeowMeres VPN XHTTP"
                 LINK="$XHTTP"
                 ;;
               grpc)
-                TITLE="🚀 MeowMere VPN gRPC"
+                TITLE="🐈 MeowMeres VPN gRPC"
                 LINK="$GRPC"
                 ;;
             esac
-
             NAMED_LINK="$(add_remark "$LINK" "$TITLE")"
             eval "${PROTO}_NAMED=\"$NAMED_LINK\""
           done
 
-          # Формируем ОДИН файл только со ссылками (для Happ)
+          # Формируем файл для HApp/Hiddify
           {
-            echo "# profile-title: 🚀 MeowMere VPN"
-            echo "# profile-update-interval: 12"
+            echo "# profile-title: 🐈 MeowMeres VPN"
+            echo "# profile-update-interval: 720"
             echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: 3"
@@ -257,10 +237,8 @@ jobs:
             if [ -n "$grpc_NAMED" ]; then echo "$grpc_NAMED"; fi
           } > ../public/vpn.txt
 
-          # Копируем
           cp ../public/vpn.txt ../public/android.txt 2>/dev/null || true
 
-          # Сжимаем
           gzip -fk ../public/vpn.txt || true
           gzip -fk ../public/android.txt || true
 
