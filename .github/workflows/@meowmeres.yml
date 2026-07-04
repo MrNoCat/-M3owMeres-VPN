@@ -191,6 +191,7 @@ jobs:
             GRPC="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
 
+          # Добавляем название через # в конце ссылки
           add_remark() {
             local link="$1"
             local name="$2"
@@ -198,31 +199,16 @@ jobs:
               echo ""
               return
             fi
-            if echo "$link" | grep -q '?'; then
-              echo "${link}&remark=$(echo "$name" | sed 's/ /%20/g')"
-            else
-              echo "${link}?remark=$(echo "$name" | sed 's/ /%20/g')"
-            fi
+            # Убираем всё после # если есть
+            link="${link%%#*}"
+            # Кодируем пробелы в %20
+            encoded_name="$(echo "$name" | sed 's/ /%20/g')"
+            echo "${link}#${encoded_name}"
           }
 
-          for PROTO in tcp xhttp grpc; do
-            case "$PROTO" in
-              tcp)
-                TITLE="🐈 MeowMeres VPN TCP"
-                LINK="$TCP"
-                ;;
-              xhttp)
-                TITLE="🐈 MeowMeres VPN XHTTP"
-                LINK="$XHTTP"
-                ;;
-              grpc)
-                TITLE="🐈 MeowMeres VPN gRPC"
-                LINK="$GRPC"
-                ;;
-            esac
-            NAMED_LINK="$(add_remark "$LINK" "$TITLE")"
-            eval "${PROTO}_NAMED=\"$NAMED_LINK\""
-          done
+          TCP_NAMED="$(add_remark "$TCP" "🐈 MeowMeres VPN TCP")"
+          XHTTP_NAMED="$(add_remark "$XHTTP" "🐈 MeowMeres VPN XHTTP")"
+          GRPC_NAMED="$(add_remark "$GRPC" "🐈 MeowMeres VPN gRPC")"
 
           # Формируем файл для HApp/Hiddify
           {
@@ -232,9 +218,9 @@ jobs:
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: 3"
             echo ""
-            if [ -n "$tcp_NAMED" ]; then echo "$tcp_NAMED"; fi
-            if [ -n "$xhttp_NAMED" ]; then echo "$xhttp_NAMED"; fi
-            if [ -n "$grpc_NAMED" ]; then echo "$grpc_NAMED"; fi
+            if [ -n "$TCP_NAMED" ]; then echo "$TCP_NAMED"; fi
+            if [ -n "$XHTTP_NAMED" ]; then echo "$XHTTP_NAMED"; fi
+            if [ -n "$GRPC_NAMED" ]; then echo "$GRPC_NAMED"; fi
           } > ../public/vpn.txt
 
           cp ../public/vpn.txt ../public/android.txt 2>/dev/null || true
