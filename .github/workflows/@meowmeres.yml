@@ -191,7 +191,7 @@ jobs:
             GRPC="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
 
-          # Добавляем название через # в конце ссылки (БЕЗ URL-кодирования)
+          # Добавляем название через # с URL-кодированием (через jq)
           add_remark() {
             local link="$1"
             local name="$2"
@@ -201,8 +201,9 @@ jobs:
             fi
             # Убираем всё после # если есть
             link="${link%%#*}"
-            # Оставляем пробелы как есть - HApp их понимает
-            echo "${link}#${name}"
+            # Кодируем через jq (эмодзи остаются, пробелы и спецсимволы кодируются)
+            encoded_name="$(echo -n "$name" | jq -sRr @uri)"
+            echo "${link}#${encoded_name}"
           }
 
           TCP_NAMED="$(add_remark "$TCP" "🐈 MeowMeres VPN TCP")"
