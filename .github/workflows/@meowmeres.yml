@@ -3,7 +3,7 @@ name: "⚡MeowMeres VPN"
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */12 * * *"
+    - cron: "*/30 * * * *"
 
 permissions:
   contents: read
@@ -78,6 +78,7 @@ jobs:
           if [ ! -s raw.txt ]; then
             echo "# profile-title: 🐈 MeowMeres VPN" > ../public/vpn.txt
             echo "# profile-update-interval: 720" >> ../public/vpn.txt
+            echo "# subscription-auto-update-enable: 1" >> ../public/vpn.txt
             echo "# NO VLESS FOUND" >> ../public/vpn.txt
             exit 0
           fi
@@ -199,9 +200,7 @@ jobs:
               echo ""
               return
             fi
-            # Убираем всё после # если есть
             link="${link%%#*}"
-            # Кодируем через jq (эмодзи остаются, пробелы и спецсимволы кодируются)
             encoded_name="$(echo -n "$name" | jq -sRr @uri)"
             echo "${link}#${encoded_name}"
           }
@@ -214,6 +213,7 @@ jobs:
           {
             echo "# profile-title: 🐈 MeowMeres VPN"
             echo "# profile-update-interval: 720"
+            echo "# subscription-auto-update-enable: 1"
             echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: 3"
