@@ -62,7 +62,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build VPN list (3 fastest servers)
+      - name: Build VPN list (3 servers together)
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -78,9 +78,8 @@ jobs:
           # Извлекаем только vless
           grep -aEo 'vless://[^[:space:]]+' safe.txt > raw.txt || true
           if [ ! -s raw.txt ]; then
-            echo "NO VLESS FOUND" > ../public/tcp.txt
-            echo "NO VLESS FOUND" > ../public/xhttp.txt
-            echo "NO VLESS FOUND" > ../public/grpc.txt
+            echo "# profile-title: 🚀 MeowMere VPN" > ../public/vpn.txt
+            echo "# NO VLESS FOUND" >> ../public/vpn.txt
             exit 0
           fi
 
@@ -184,23 +183,23 @@ jobs:
           # Сортируем по score (меньше = быстрее)
           sort -t'|' -n -k1 scored.txt | cut -d'|' -f2- > sorted.txt
 
-          # Теперь выбираем 3 сервера: TCP, XHTTP, gRPC (самые быстрые в каждой категории)
+          # Выбираем 3 сервера: TCP, XHTTP, gRPC (самые быстрые в каждой категории)
           DATE="$(date +"%d.%m.%Y")"
           TIME="$(date +"%H:%M")"
 
-          # Ищем TCP (reality и tcp)
+          # TCP (reality + tcp или просто reality без grpc/xhttp)
           grep -iE '(tcp|reality)' sorted.txt | grep -viE '(grpc|xhttp|ws)' > tcp_candidates.txt || true
           TCP="$(head -n 1 tcp_candidates.txt || echo "")"
 
-          # Ищем XHTTP (reality и xhttp)
-          grep -iE '(xhttp|http)' sorted.txt | grep -viE '(grpc|tcp)' > xhttp_candidates.txt || true
+          # XHTTP (reality + xhttp)
+          grep -iE '(xhttp|http)' sorted.txt | grep -viE '(grpc|tcp|ws)' > xhttp_candidates.txt || true
           XHTTP="$(head -n 1 xhttp_candidates.txt || echo "")"
 
-          # Ищем gRPC (reality и grpc)
+          # gRPC (reality + grpc)
           grep -iE 'grpc' sorted.txt | grep -viE '(tcp|xhttp|ws)' > grpc_candidates.txt || true
           GRPC="$(head -n 1 grpc_candidates.txt || echo "")"
 
-          # Если какой-то не найден - ищем любой reality без привязки к типу
+          # Fallback: если какой-то не найден - берём любой reality
           if [ -z "$TCP" ]; then
             TCP="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
@@ -211,45 +210,30 @@ jobs:
             GRPC="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
 
-          # Формируем файлы
+          # Формируем ОДИН файл с тремя серверами
           {
-            echo "# profile-title: 🚀 MeowMere VPN TCP"
+            echo "# profile-title: 🚀 MeowMere VPN"
             echo "# profile-update-interval: 12"
             echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
             echo "# update: $DATE $TIME (MSK)"
-            echo "# servers: 1"
+            echo "# servers: 3"
             echo ""
-            if [ -n "$TCP" ]; then echo "$TCP"; else echo "NO TCP SERVER FOUND"; fi
-          } > ../public/tcp.txt
-
-          {
-            echo "# profile-title: 🚀 MeowMere VPN XHTTP"
-            echo "# profile-update-interval: 12"
-            echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
-            echo "# update: $DATE $TIME (MSK)"
-            echo "# servers: 1"
+            echo "# 🚀 MeowMere VPN TCP"
+            if [ -n "$TCP" ]; then echo "$TCP"; else echo "# NO TCP SERVER"; fi
             echo ""
-            if [ -n "$XHTTP" ]; then echo "$XHTTP"; else echo "NO XHTTP SERVER FOUND"; fi
-          } > ../public/xhttp.txt
-
-          {
-            echo "# profile-title: 🚀 MeowMere VPN gRPC"
-            echo "# profile-update-interval: 12"
-            echo "# subscription-userinfo: upload=0; download=0; total=0; expire=0"
-            echo "# update: $DATE $TIME (MSK)"
-            echo "# servers: 1"
+            echo "# 🚀 MeowMere VPN XHTTP"
+            if [ -n "$XHTTP" ]; then echo "$XHTTP"; else echo "# NO XHTTP SERVER"; fi
             echo ""
-            if [ -n "$GRPC" ]; then echo "$GRPC"; else echo "NO GRPC SERVER FOUND"; fi
-          } > ../public/grpc.txt
+            echo "# 🚀 MeowMere VPN gRPC"
+            if [ -n "$GRPC" ]; then echo "$GRPC"; else echo "# NO GRPC SERVER"; fi
+          } > ../public/vpn.txt
 
           # Копируем для совместимости
-          cp ../public/tcp.txt ../public/vpn.txt 2>/dev/null || true
-          cp ../public/tcp.txt ../public/android.txt 2>/dev/null || true
+          cp ../public/vpn.txt ../public/android.txt 2>/dev/null || true
 
           # Сжимаем
-          gzip -fk ../public/tcp.txt || true
-          gzip -fk ../public/xhttp.txt || true
-          gzip -fk ../public/grpc.txt || true
+          gzip -fk ../public/vpn.txt || true
+          gzip -fk ../public/android.txt || true
 
           sync
 
