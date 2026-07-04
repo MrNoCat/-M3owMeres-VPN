@@ -62,7 +62,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build VPN list (3 servers with names)
+      - name: Build VPN list (3 fastest servers)
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -178,26 +178,26 @@ jobs:
             xargs -0 -P 20 -I {} bash -c 'score_server "$1"' _ "{}" \
             >> scored.txt
 
-          # Сортируем по score (меньше = быстрее)
+          # СОРТИРУЕМ по score (меньше = быстрее)
           sort -t'|' -n -k1 scored.txt | cut -d'|' -f2- > sorted.txt
 
-          # Выбираем 3 сервера
+          # ============================================================
+          # ВЫБИРАЕМ САМЫЕ БЫСТРЫЕ СЕРВЕРА ИЗ ОТСОРТИРОВАННОГО СПИСКА
+          # sorted.txt уже отсортирован - первый = самый быстрый
+          # ============================================================
           DATE="$(date +"%d.%m.%Y")"
           TIME="$(date +"%H:%M")"
 
-          # TCP
-          grep -iE '(tcp|reality)' sorted.txt | grep -viE '(grpc|xhttp|ws)' > tcp_candidates.txt || true
-          TCP="$(head -n 1 tcp_candidates.txt || echo "")"
+          # TCP - берём первый подходящий из ОТСОРТИРОВАННОГО списка
+          TCP="$(grep -iE '(tcp|reality)' sorted.txt | grep -viE '(grpc|xhttp|ws)' | head -n 1 || echo "")"
 
-          # XHTTP
-          grep -iE '(xhttp|http)' sorted.txt | grep -viE '(grpc|tcp|ws)' > xhttp_candidates.txt || true
-          XHTTP="$(head -n 1 xhttp_candidates.txt || echo "")"
+          # XHTTP - берём первый подходящий из ОТСОРТИРОВАННОГО списка
+          XHTTP="$(grep -iE '(xhttp|http)' sorted.txt | grep -viE '(grpc|tcp|ws)' | head -n 1 || echo "")"
 
-          # gRPC
-          grep -iE 'grpc' sorted.txt | grep -viE '(tcp|xhttp|ws)' > grpc_candidates.txt || true
-          GRPC="$(head -n 1 grpc_candidates.txt || echo "")"
+          # gRPC - берём первый подходящий из ОТСОРТИРОВАННОГО списка
+          GRPC="$(grep -iE 'grpc' sorted.txt | grep -viE '(tcp|xhttp|ws)' | head -n 1 || echo "")"
 
-          # Fallback
+          # Fallback: если какой-то не найден - берём любой самый быстрый reality
           if [ -z "$TCP" ]; then
             TCP="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
@@ -208,7 +208,7 @@ jobs:
             GRPC="$(grep -i 'reality' sorted.txt | head -n 1 || echo "")"
           fi
 
-          # Добавляем названия в ссылки через параметр remark
+          # Функция добавления названия через remark
           add_remark() {
             local link="$1"
             local name="$2"
@@ -216,7 +216,6 @@ jobs:
               echo ""
               return
             fi
-            # Если в ссылке уже есть ? — добавляем &remark, иначе ?remark
             if echo "$link" | grep -q '?'; then
               echo "${link}&remark=$(echo "$name" | sed 's/ /%20/g')"
             else
@@ -224,9 +223,26 @@ jobs:
             fi
           }
 
-          TCP_NAMED="$(add_remark "$TCP" "🚀 MeowMere VPN TCP")"
-          XHTTP_NAMED="$(add_remark "$XHTTP" "🚀 MeowMere VPN XHTTP")"
-          GRPC_NAMED="$(add_remark "$GRPC" "🚀 MeowMere VPN gRPC")"
+          # Формируем файлы с названиями через case
+          for PROTO in tcp xhttp grpc; do
+            case "$PROTO" in
+              tcp)
+                TITLE="🚀 MeowMere VPN TCP"
+                LINK="$TCP"
+                ;;
+              xhttp)
+                TITLE="🚀 MeowMere VPN XHTTP"
+                LINK="$XHTTP"
+                ;;
+              grpc)
+                TITLE="🚀 MeowMere VPN gRPC"
+                LINK="$GRPC"
+                ;;
+            esac
+
+            NAMED_LINK="$(add_remark "$LINK" "$TITLE")"
+            eval "${PROTO}_NAMED=\"$NAMED_LINK\""
+          done
 
           # Формируем ОДИН файл только со ссылками (для Happ)
           {
@@ -236,9 +252,9 @@ jobs:
             echo "# update: $DATE $TIME (MSK)"
             echo "# servers: 3"
             echo ""
-            if [ -n "$TCP_NAMED" ]; then echo "$TCP_NAMED"; fi
-            if [ -n "$XHTTP_NAMED" ]; then echo "$XHTTP_NAMED"; fi
-            if [ -n "$GRPC_NAMED" ]; then echo "$GRPC_NAMED"; fi
+            if [ -n "$tcp_NAMED" ]; then echo "$tcp_NAMED"; fi
+            if [ -n "$xhttp_NAMED" ]; then echo "$xhttp_NAMED"; fi
+            if [ -n "$grpc_NAMED" ]; then echo "$grpc_NAMED"; fi
           } > ../public/vpn.txt
 
           # Копируем
