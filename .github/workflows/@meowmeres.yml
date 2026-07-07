@@ -3,7 +3,7 @@ name: "⚡MeowMeres VPN"
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"  # Каждые 6 часов
+    - cron: "0 * * * *"  # Каждый час
 
 permissions:
   contents: read
@@ -15,13 +15,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MAX_SERVERS: 60            # Сколько серверов реально тестируем (лимит нагрузки)
+  MAX_SERVERS: 150           # Сколько серверов реально тестируем за прогон
   TOP_N: 5                   # Сколько лучших серверов класть в итоговый список
   PING_ATTEMPTS: 3           # Сколько раз пинговать каждый сервер
   TEST_TIMEOUT: 3            # Таймаут одного теста в секундах
-  PARALLEL_JOBS: 10          # Параллельных проверок
+  PARALLEL_JOBS: 15          # Параллельных проверок
   MAX_SCORE: 999999          # Score для недоступных серверов
-  CACHE_TTL: 3600            # Время жизни DNS-кэша, секунд
+  CACHE_TTL: 3600            # Время жизни DNS-кэша, секунд (при часовом расписании
+                              # можно смело держать 3600 — кэш живёт ровно до
+                              # следующего запуска и не протухает зря)
 
 jobs:
   build:
@@ -342,7 +344,7 @@ jobs:
 
           if [ ! -s scored.txt ]; then
             echo "::warning::All tests failed, using unfiltered list"
-            awk '{print "999999|"$0}' filtered.txt > scored.txt
+            awk -v maxscore="${MAX_SCORE}" '{print maxscore"|"$0}' filtered.txt > scored.txt
           fi
 
           echo "Tested servers: $(wc -l < scored.txt)"
@@ -366,17 +368,9 @@ jobs:
           head -n 10 sorted.txt | nl
 
           # Топ-N лучших вообще, независимо от протокола — это и есть
-          # реальное "улучшение подбора быстрых серверов"
+          # реальное "улучшение подбора быстрых серверов". В итоговый файл
+          # идут ровно эти TOP_N (=5) серверов, без дублей по протоколам.
           cut -d'|' -f2- sorted.txt | head -n "${TOP_N}" > top_n.txt
-
-          select_by_protocol() {
-            local protocol="$1"
-            cut -d'|' -f2- sorted.txt | grep -iE "(^|.*[^a-z])${protocol}([^a-z]|$)" | head -n 1 || true
-          }
-
-          REALITY=$(select_by_protocol "reality")
-          GRPC=$(select_by_protocol "grpc")
-          XHTTP=$(select_by_protocol "xhttp")
 
           echo "::endgroup::"
 
@@ -406,17 +400,12 @@ jobs:
             echo "# stats: total=$(wc -l < filtered.txt), tested=$(wc -l < scored.txt), reachable=$(wc -l < sorted.txt)"
             echo ""
 
-            # Топ-N лучших серверов по факту измеренной скорости
+            # Ровно TOP_N (5) самых быстрых серверов по факту измерений
             i=1
             while IFS= read -r link; do
               add_remark "$link" "🐈 MeowMeres VPN #${i}"
               i=$((i + 1))
             done < top_n.txt
-
-            # Плюс явные варианты по протоколу для совместимости с разными клиентами
-            [ -n "$REALITY" ] && add_remark "$REALITY" "🐈 MeowMeres VPN REALITY"
-            [ -n "$GRPC" ]    && add_remark "$GRPC"    "🐈 MeowMeres VPN gRPC"
-            [ -n "$XHTTP" ]   && add_remark "$XHTTP"   "🐈 MeowMeres VPN XHTTP"
           } > ../public/vpn.txt
 
           cp ../public/vpn.txt ../public/android.txt 2>/dev/null || true
