@@ -40,10 +40,14 @@ jobs:
           # На раннере ubuntu-latest предустановлен репозиторий
           # packages.microsoft.com (azure-cli), который периодически отдаёт
           # битую подпись ("Clearsigned file isn't valid, got 'NOSPLIT'").
-          # Он нам не нужен — убираем его, чтобы apt-get update не падал.
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.list
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          sudo rm -f /etc/apt/sources.list.d/*microsoft*.list 2>/dev/null || true
+          # Имя файла источника может быть *.list или *.sources (deb822-формат
+          # в Ubuntu 24.04), поэтому ищем по содержимому, а не по имени.
+          for f in /etc/apt/sources.list.d/*; do
+            if [ -f "$f" ] && grep -q "packages.microsoft.com" "$f" 2>/dev/null; then
+              echo "Removing broken repo file: $f"
+              sudo rm -f "$f"
+            fi
+          done
 
           sudo apt-get update
           sudo apt-get install -y \
