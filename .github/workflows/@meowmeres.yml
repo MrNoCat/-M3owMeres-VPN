@@ -36,6 +36,15 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+
+          # На раннере ubuntu-latest предустановлен репозиторий
+          # packages.microsoft.com (azure-cli), который периодически отдаёт
+          # битую подпись ("Clearsigned file isn't valid, got 'NOSPLIT'").
+          # Он нам не нужен — убираем его, чтобы apt-get update не падал.
+          sudo rm -f /etc/apt/sources.list.d/azure-cli.list
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo rm -f /etc/apt/sources.list.d/*microsoft*.list 2>/dev/null || true
+
           sudo apt-get update
           sudo apt-get install -y \
             gawk \
