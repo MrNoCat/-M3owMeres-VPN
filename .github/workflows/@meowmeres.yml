@@ -36,14 +36,12 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-
           for f in /etc/apt/sources.list.d/*; do
             if [ -f "$f" ] && grep -q "packages.microsoft.com" "$f" 2>/dev/null; then
               echo "Removing broken repo file: $f"
               sudo rm -f "$f"
             fi
           done
-
           sudo apt-get update
           sudo apt-get install -y \
             gawk \
@@ -54,9 +52,7 @@ jobs:
             bc \
             parallel \
             moreutils
-
           gawk --version | head -n1
-
       - name: Cache DNS resolutions
         uses: actions/cache@v3
         id: dns-cache
@@ -65,18 +61,15 @@ jobs:
           key: dns-cache-${{ github.run_id }}
           restore-keys: |
             dns-cache-
-
       - name: Download VPN sources
         shell: bash
         run: |
           set -Eeuo pipefail
           mkdir -p work public tmp
-
           SOURCES=(
-            "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt"
             "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt"
+            "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt"
           )
-
           : > work/all.txt
           for url in "${SOURCES[@]}"; do
             echo "::group::Downloading: $url"
@@ -94,30 +87,24 @@ jobs:
             rm -f "$tmpfile"
             echo "::endgroup::"
           done
-
           if [ ! -s work/all.txt ]; then
             echo "::error::No source data downloaded"
             exit 1
           fi
-
           echo "Total data size: $(wc -c < work/all.txt) bytes"
-
       - name: Build VPN list
         shell: bash
         run: |
           set -Eeuo pipefail
           export TZ=Europe/Moscow
           cd work
-
           # ============================================
           # 1. EXTRACTION & CLEANING
           # ============================================
           echo "::group::Extracting VLESS links"
-
           tr -d '\r' < all.txt | \
             awk 'length($0) < 10000' | \
             grep -aEo 'vless://[^[:space:]]+' > raw.txt || true
-
           if [ ! -s raw.txt ]; then
             echo "::error::No VLESS links found"
             cat > ../public/vpn.txt << 'EOF'
@@ -128,54 +115,41 @@ jobs:
           EOF
             exit 0
           fi
-
           echo "Raw links: $(wc -l < raw.txt)"
           echo "::endgroup::"
-
           # ============================================
           # 2. FILTERING
           # ============================================
           echo "::group::Filtering links"
-
           grep -aviE '(anycast|proxyip|cdn-cgi|workers\.dev|pages\.dev|cloudflare|cf-ipfs)' raw.txt | \
             sed -E \
               -e 's/\[(RUSSIA|BL|ANYCAST)\]//gi' \
               -e 's/%5B(BL|ANYCAST)%5D//gi' \
               -e 's/[[:space:]]+$//' \
             > clean.txt
-
           awk '!seen[$0]++' clean.txt > unique.txt
-
           grep -aE '^vless://' unique.txt | \
             grep -aviE '(expired|blocked|spam|localhost|127\.0\.0\.1)' \
             > filtered.txt || true
-
           if [ ! -s filtered.txt ]; then
             cp unique.txt filtered.txt
           fi
-
           shuf filtered.txt | head -n "${MAX_SERVERS}" > filtered_capped.txt
           mv filtered_capped.txt filtered.txt
-
           echo "After filtering (capped at ${MAX_SERVERS}): $(wc -l < filtered.txt)"
           echo "::endgroup::"
-
           # ============================================
           # 3. DNS RESOLUTION WITH TTL-AWARE CACHE
           # ============================================
           echo "::group::DNS Resolution"
-
           gawk '{
             if (match($0, /^vless:\/\/([^@]+@)?([^:\/?#]+)/, a)) {
               print a[2]
             }
           }' filtered.txt | sort -u > hosts.txt
-
           echo "Unique hosts: $(wc -l < hosts.txt)"
-
           touch dns_cache.db
           touch dns_cache.lock
-
           resolve_host() {
             local host="$1"
             local cache_file="dns_cache.db"
@@ -183,7 +157,6 @@ jobs:
             local ttl="${CACHE_TTL}"
             local now
             now="$(date +%s)"
-
             # Формат кэша: host|ip|timestamp
             local cached_line
             cached_line=$(grep "^${host}|" "$cache_file" 2>/dev/null | tail -n1 || true)
@@ -197,14 +170,12 @@ jobs:
                 return 0
               fi
             fi
-
             local ip=""
             if [[ "$host" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
               ip="$host"
             else
               ip="$(timeout 5 getent ahostsv4 "$host" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
             fi
-
             if [ -n "$ip" ]; then
               (
                 flock -x 200
@@ -215,45 +186,34 @@ jobs:
               echo "${host}|"
             fi
           }
-
           export -f resolve_host
           export CACHE_TTL
-
           parallel --jobs "${PARALLEL_JOBS}" --timeout 10 resolve_host {} \
             < hosts.txt > resolved_ips.txt 2>/dev/null || true
-
           now="$(date +%s)"
           awk -F'|' -v now="$now" -v ttl="${CACHE_TTL}" '(now - $3) < ttl' dns_cache.db > dns_cache_clean.db || true
           mv dns_cache_clean.db dns_cache.db
-
           echo "Resolved IPs: $(grep -c '|[0-9]' resolved_ips.txt || echo 0)"
           echo "::endgroup::"
-
           # ============================================
           # 4. PERFORMANCE TESTING (multi-sample)
           # ============================================
           echo "::group::Testing server performance"
-
           gawk -F'|' 'NR==FNR {ip[$1]=$2; next} {
             host=""; port="443"
             if (match($0, /^vless:\/\/([^@]+@)?([^:\/?#]+)/, a)) host=a[2]
             if (match($0, /.*:([0-9]{2,5})([/?#].*)?$/, p)) port=p[1]
             if (host && host in ip && ip[host] != "") print host"|"port"|"ip[host]"|"$0
           }' resolved_ips.txt filtered.txt > test_input.txt
-
           echo "Servers to test: $(wc -l < test_input.txt)"
-
           test_server() {
             local line="$1"
             local host port target link
             local timeout_s="${TEST_TIMEOUT}"
             local attempts="${PING_ATTEMPTS}"
-
             IFS='|' read -r host port target link <<< "$line"
-
             local samples=()
             local sent=0 recv=0
-
             for _ in $(seq 1 "$attempts"); do
               sent=$((sent + 1))
               local ms
@@ -263,7 +223,6 @@ jobs:
                 samples+=("$ms")
               fi
             done
-
             local final_score
             if [ "${#samples[@]}" -gt 0 ]; then
               local sum=0
@@ -272,10 +231,8 @@ jobs:
               done
               local avg
               avg=$(echo "scale=2; $sum / ${#samples[@]}" | bc)
-
               local loss_penalty
               loss_penalty=$(echo "scale=2; ($sent - $recv) * 40" | bc)
-
               final_score=$(echo "$avg + $loss_penalty" | bc)
             else
               local start end
@@ -288,65 +245,48 @@ jobs:
                 return 0
               fi
             fi
-
             local multiplier=1.0
             echo "$link" | grep -qiE '[?&]security=reality(&|#|$)' && multiplier=$(echo "$multiplier * 0.85" | bc)
             echo "$link" | grep -qiE '[?&]type=grpc(&|#|$)'        && multiplier=$(echo "$multiplier * 0.90" | bc)
             echo "$link" | grep -qiE '[?&]security=tls(&|#|$)'     && multiplier=$(echo "$multiplier * 0.93" | bc)
             echo "$link" | grep -qiE '[?&]type=ws(&|#|$)'          && multiplier=$(echo "$multiplier * 0.97" | bc)
             [ "$port" = "443" ] && multiplier=$(echo "$multiplier * 0.95" | bc)
-
             final_score=$(echo "scale=2; $final_score * $multiplier" | bc)
-
             final_score=$(printf '%.0f' "$final_score" 2>/dev/null || echo "${MAX_SCORE}")
             [ "$final_score" -lt 1 ] && final_score=1
-
             echo "${final_score}|${link}"
           }
-
           export -f test_server
           export TEST_TIMEOUT PING_ATTEMPTS MAX_SCORE
-
           cat test_input.txt | \
             parallel --jobs "${PARALLEL_JOBS}" --timeout "$((TEST_TIMEOUT * PING_ATTEMPTS + 5))" \
               test_server {} > scored.txt 2>/dev/null || true
-
           if [ ! -s scored.txt ]; then
             echo "::warning::All tests failed, using unfiltered list"
             awk -v maxscore="${MAX_SCORE}" '{print maxscore"|"$0}' filtered.txt > scored.txt
           fi
-
           echo "Tested servers: $(wc -l < scored.txt)"
           echo "::endgroup::"
-
           # ============================================
           # 5. SELECT BEST SERVERS
           # ============================================
           echo "::group::Selecting best servers"
-
           awk -F'|' -v maxscore="${MAX_SCORE}" '$1 < maxscore' scored.txt \
             | sort -t'|' -n -k1 > sorted.txt
-
           if [ ! -s sorted.txt ]; then
             echo "::warning::No reachable servers, falling back to full sorted list"
             sort -t'|' -n -k1 scored.txt > sorted.txt
           fi
-
           echo "Top 10 fastest (score|link):"
           head -n 10 sorted.txt | nl
-
           cut -d'|' -f2- sorted.txt | head -n "${TOP_N}" > top_n.txt
-
           echo "::endgroup::"
-
           # ============================================
           # 6. GENERATE OUTPUT
           # ============================================
           echo "::group::Generating output"
-
           DATE="$(date +"%d.%m.%Y")"
           TIME="$(date +"%H:%M")"
-
           add_remark() {
             local link="$1"
             local name="$2"
@@ -355,7 +295,6 @@ jobs:
             encoded_name="$(printf '%s' "$name" | jq -sRr @uri)"
             echo "${link}#${encoded_name}"
           }
-
           {
             echo "# profile-title: 🐈 MeowMeres VPN"
             echo "# profile-update-interval: 720"
@@ -364,43 +303,34 @@ jobs:
             echo "# update: $DATE $TIME (MSK)"
             echo "# stats: total=$(wc -l < filtered.txt), tested=$(wc -l < scored.txt), reachable=$(wc -l < sorted.txt)"
             echo ""
-
             i=1
             while IFS= read -r link; do
               add_remark "$link" "🐈 MeowMeres VPN #${i}"
               i=$((i + 1))
             done < top_n.txt
           } > ../public/vpn.txt
-
           cp ../public/vpn.txt ../public/android.txt 2>/dev/null || true
-
           gzip -fk ../public/vpn.txt || true
           gzip -fk ../public/android.txt || true
-
           echo "✅ Generated vpn.txt ($(wc -l < ../public/vpn.txt) lines)"
           echo "::endgroup::"
-
       - name: Verify output
         shell: bash
         run: |
           set -Eeuo pipefail
-
           if [ ! -s public/vpn.txt ]; then
             echo "::error::Output file is empty"
             exit 1
           fi
-
           if ! grep -q '^vless://' public/vpn.txt; then
             echo "::warning::No VLESS links in output"
           else
             echo "✅ Output contains $(grep -c '^vless://' public/vpn.txt) VLESS links"
           fi
-
           size=$(stat -c%s public/vpn.txt 2>/dev/null || stat -f%z public/vpn.txt 2>/dev/null)
           if [ "$size" -lt 100 ]; then
             echo "::warning::Output file is suspiciously small ($size bytes)"
           fi
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
