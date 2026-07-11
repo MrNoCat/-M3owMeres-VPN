@@ -21,9 +21,7 @@ env:
   TEST_TIMEOUT: 3            # Таймаут одного теста в секундах
   PARALLEL_JOBS: 15          # Параллельных проверок
   MAX_SCORE: 999999          # Score для недоступных серверов
-  CACHE_TTL: 3600            # Время жизни DNS-кэша, секунд (при часовом расписании
-                              # можно смело держать 3600 — кэш живёт ровно до
-                              # следующего запуска и не протухает зря)
+  CACHE_TTL: 3600            # Время жизни DNS-кэша, секунд
 
 jobs:
   build:
@@ -39,11 +37,6 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          # На раннере ubuntu-latest предустановлен репозиторий
-          # packages.microsoft.com (azure-cli), который периодически отдаёт
-          # битую подпись ("Clearsigned file isn't valid, got 'NOSPLIT'").
-          # Имя файла источника может быть *.list или *.sources (deb822-формат
-          # в Ubuntu 24.04), поэтому ищем по содержимому, а не по имени.
           for f in /etc/apt/sources.list.d/*; do
             if [ -f "$f" ] && grep -q "packages.microsoft.com" "$f" 2>/dev/null; then
               echo "Removing broken repo file: $f"
@@ -61,10 +54,8 @@ jobs:
             bc \
             parallel \
             moreutils
-          # ВАЖНО: на ubuntu-latest системный /usr/bin/awk — это mawk,
-          # который не понимает match($0, re, arr) с массивом.
-          # Явно переключаемся на gawk, чтобы парсинг host/port не ломался молча.
-          sudo update-alternatives --set awk /usr/bin/gawk
+
+          gawk --version | head -n1
 
       - name: Cache DNS resolutions
         uses: actions/cache@v3
@@ -163,8 +154,6 @@ jobs:
             cp unique.txt filtered.txt
           fi
 
-          # Перемешиваем и обрезаем до MAX_SERVERS, чтобы не тестировать
-          # тысячи ссылок и не упираться в TEST_TIMEOUT / PARALLEL_JOBS.
           shuf filtered.txt | head -n "${MAX_SERVERS}" > filtered_capped.txt
           mv filtered_capped.txt filtered.txt
 
@@ -176,7 +165,7 @@ jobs:
           # ============================================
           echo "::group::DNS Resolution"
 
-          awk '{
+          gawk '{
             if (match($0, /^vless:\/\/([^@]+@)?([^:\/?#]+)/, a)) {
               print a[2]
             }
@@ -184,11 +173,7 @@ jobs:
 
           echo "Unique hosts: $(wc -l < hosts.txt)"
 
-          if [ -f ../dns_cache.db ]; then
-            cp ../dns_cache.db dns_cache.db || true
-          else
-            : > dns_cache.db
-          fi
+          touch dns_cache.db
           touch dns_cache.lock
 
           resolve_host() {
@@ -208,7 +193,7 @@ jobs:
               cached_ts=$(echo "$cached_line" | cut -d'|' -f3)
               age=$((now - cached_ts))
               if [ -n "$cached_ip" ] && [ "$age" -lt "$ttl" ]; then
-                echo "$cached_ip"
+                echo "${host}|${cached_ip}"
                 return 0
               fi
             fi
@@ -217,36 +202,29 @@ jobs:
             if [[ "$host" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
               ip="$host"
             else
-              ip="$(timeout 5 getent ahostsv4 "$host" | awk '{print $1}' | head -n1 || true)"
+              ip="$(timeout 5 getent ahostsv4 "$host" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
             fi
 
             if [ -n "$ip" ]; then
-              # flock защищает от гонок при параллельной записи из разных процессов
               (
                 flock -x 200
                 echo "${host}|${ip}|${now}" >> "$cache_file"
               ) 200>"$lock_file"
-              echo "$ip"
-              return 0
+              echo "${host}|${ip}"
+            else
+              echo "${host}|"
             fi
-            return 1
           }
 
           export -f resolve_host
           export CACHE_TTL
 
-          cat hosts.txt | \
-            parallel --jobs "${PARALLEL_JOBS}" --timeout 10 resolve_host {} > resolved_hosts_raw.txt 2>/dev/null || true
+          parallel --jobs "${PARALLEL_JOBS}" --timeout 10 resolve_host {} \
+            < hosts.txt > resolved_ips.txt 2>/dev/null || true
 
-          # parallel не сохраняет исходный host в выводе resolve_host,
-          # поэтому пересобираем пары host|ip через paste
-          paste -d'|' hosts.txt resolved_hosts_raw.txt > resolved_ips.txt
-
-          # Чистим кэш от устаревших записей (старше TTL), чтобы файл не рос бесконечно
           now="$(date +%s)"
           awk -F'|' -v now="$now" -v ttl="${CACHE_TTL}" '(now - $3) < ttl' dns_cache.db > dns_cache_clean.db || true
           mv dns_cache_clean.db dns_cache.db
-          cp dns_cache.db ../dns_cache.db 2>/dev/null || true
 
           echo "Resolved IPs: $(grep -c '|[0-9]' resolved_ips.txt || echo 0)"
           echo "::endgroup::"
@@ -256,7 +234,7 @@ jobs:
           # ============================================
           echo "::group::Testing server performance"
 
-          awk -F'|' 'NR==FNR {ip[$1]=$2; next} {
+          gawk -F'|' 'NR==FNR {ip[$1]=$2; next} {
             host=""; port="443"
             if (match($0, /^vless:\/\/([^@]+@)?([^:\/?#]+)/, a)) host=a[2]
             if (match($0, /.*:([0-9]{2,5})([/?#].*)?$/, p)) port=p[1]
@@ -265,8 +243,6 @@ jobs:
 
           echo "Servers to test: $(wc -l < test_input.txt)"
 
-          # Тест с несколькими замерами: берём медиану/минимум из PING_ATTEMPTS,
-          # плюс учитываем потери пакетов — сервер с нестабильным пингом штрафуется.
           test_server() {
             local line="$1"
             local host port target link
@@ -290,7 +266,6 @@ jobs:
 
             local final_score
             if [ "${#samples[@]}" -gt 0 ]; then
-              # среднее по успешным замерам (в bc, чтобы не терять дробную часть)
               local sum=0
               for s in "${samples[@]}"; do
                 sum=$(echo "$sum + $s" | bc)
@@ -298,13 +273,11 @@ jobs:
               local avg
               avg=$(echo "scale=2; $sum / ${#samples[@]}" | bc)
 
-              # штраф за потерю пакетов: чем больше потерь, тем хуже итоговый score
               local loss_penalty
               loss_penalty=$(echo "scale=2; ($sent - $recv) * 40" | bc)
 
               final_score=$(echo "$avg + $loss_penalty" | bc)
             else
-              # ICMP недоступен — fallback на TCP connect с точным замером в мс
               local start end
               start=$(date +%s%3N)
               if timeout "$timeout_s" nc -zv "$target" "$port" 2>/dev/null; then
@@ -316,19 +289,15 @@ jobs:
               fi
             fi
 
-            # Бонусы теперь мультипликативные (0 < multiplier <= 1), а не вычитание —
-            # так score никогда не уходит в отрицательные значения и не "прилипает" к 1,
-            # сохраняя относительный порядок между быстрыми серверами.
             local multiplier=1.0
-            echo "$link" | grep -qi 'reality' && multiplier=$(echo "$multiplier * 0.85" | bc)
-            echo "$link" | grep -qi 'grpc'    && multiplier=$(echo "$multiplier * 0.90" | bc)
-            echo "$link" | grep -qi 'tls'     && multiplier=$(echo "$multiplier * 0.93" | bc)
-            echo "$link" | grep -qi 'ws'      && multiplier=$(echo "$multiplier * 0.97" | bc)
+            echo "$link" | grep -qiE '[?&]security=reality(&|#|$)' && multiplier=$(echo "$multiplier * 0.85" | bc)
+            echo "$link" | grep -qiE '[?&]type=grpc(&|#|$)'        && multiplier=$(echo "$multiplier * 0.90" | bc)
+            echo "$link" | grep -qiE '[?&]security=tls(&|#|$)'     && multiplier=$(echo "$multiplier * 0.93" | bc)
+            echo "$link" | grep -qiE '[?&]type=ws(&|#|$)'          && multiplier=$(echo "$multiplier * 0.97" | bc)
             [ "$port" = "443" ] && multiplier=$(echo "$multiplier * 0.95" | bc)
 
             final_score=$(echo "scale=2; $final_score * $multiplier" | bc)
 
-            # защита от пустого/некорректного результата bc
             final_score=$(printf '%.0f' "$final_score" 2>/dev/null || echo "${MAX_SCORE}")
             [ "$final_score" -lt 1 ] && final_score=1
 
@@ -351,11 +320,10 @@ jobs:
           echo "::endgroup::"
 
           # ============================================
-          # 5. SELECT BEST SERVERS (top-N overall + per protocol)
+          # 5. SELECT BEST SERVERS
           # ============================================
           echo "::group::Selecting best servers"
 
-          # Отбрасываем недоступные (MAX_SCORE) перед сортировкой
           awk -F'|' -v maxscore="${MAX_SCORE}" '$1 < maxscore' scored.txt \
             | sort -t'|' -n -k1 > sorted.txt
 
@@ -367,9 +335,6 @@ jobs:
           echo "Top 10 fastest (score|link):"
           head -n 10 sorted.txt | nl
 
-          # Топ-N лучших вообще, независимо от протокола — это и есть
-          # реальное "улучшение подбора быстрых серверов". В итоговый файл
-          # идут ровно эти TOP_N (=5) серверов, без дублей по протоколам.
           cut -d'|' -f2- sorted.txt | head -n "${TOP_N}" > top_n.txt
 
           echo "::endgroup::"
@@ -400,7 +365,6 @@ jobs:
             echo "# stats: total=$(wc -l < filtered.txt), tested=$(wc -l < scored.txt), reachable=$(wc -l < sorted.txt)"
             echo ""
 
-            # Ровно TOP_N (5) самых быстрых серверов по факту измерений
             i=1
             while IFS= read -r link; do
               add_remark "$link" "🐈 MeowMeres VPN #${i}"
