@@ -53,6 +53,7 @@ jobs:
             parallel \
             moreutils
           gawk --version | head -n1
+
       - name: Cache DNS resolutions
         uses: actions/cache@v3
         id: dns-cache
@@ -61,6 +62,7 @@ jobs:
           key: dns-cache-${{ github.run_id }}
           restore-keys: |
             dns-cache-
+
       - name: Download VPN sources
         shell: bash
         run: |
@@ -92,12 +94,14 @@ jobs:
             exit 1
           fi
           echo "Total data size: $(wc -c < work/all.txt) bytes"
+
       - name: Build VPN list
         shell: bash
         run: |
           set -Eeuo pipefail
           export TZ=Europe/Moscow
           cd work
+
           # ============================================
           # 1. EXTRACTION & CLEANING
           # ============================================
@@ -117,6 +121,7 @@ jobs:
           fi
           echo "Raw links: $(wc -l < raw.txt)"
           echo "::endgroup::"
+
           # ============================================
           # 2. FILTERING
           # ============================================
@@ -134,10 +139,17 @@ jobs:
           if [ ! -s filtered.txt ]; then
             cp unique.txt filtered.txt
           fi
-          shuf filtered.txt | head -n "${MAX_SERVERS}" > filtered_capped.txt
+
+          # ИСПРАВЛЕНИЕ: вместо пайпа shuf | head, который ломает pipefail
+          if [ -s filtered.txt ]; then
+            head -n "${MAX_SERVERS}" <(shuf filtered.txt) > filtered_capped.txt
+          else
+            touch filtered_capped.txt
+          fi
           mv filtered_capped.txt filtered.txt
           echo "After filtering (capped at ${MAX_SERVERS}): $(wc -l < filtered.txt)"
           echo "::endgroup::"
+
           # ============================================
           # 3. DNS RESOLUTION WITH TTL-AWARE CACHE
           # ============================================
@@ -148,8 +160,10 @@ jobs:
             }
           }' filtered.txt | sort -u > hosts.txt
           echo "Unique hosts: $(wc -l < hosts.txt)"
+
           touch dns_cache.db
           touch dns_cache.lock
+
           resolve_host() {
             local host="$1"
             local cache_file="dns_cache.db"
@@ -157,7 +171,6 @@ jobs:
             local ttl="${CACHE_TTL}"
             local now
             now="$(date +%s)"
-            # Формат кэша: host|ip|timestamp
             local cached_line
             cached_line=$(grep "^${host}|" "$cache_file" 2>/dev/null | tail -n1 || true)
             if [ -n "$cached_line" ]; then
@@ -188,13 +201,16 @@ jobs:
           }
           export -f resolve_host
           export CACHE_TTL
+
           parallel --jobs "${PARALLEL_JOBS}" --timeout 10 resolve_host {} \
             < hosts.txt > resolved_ips.txt 2>/dev/null || true
+
           now="$(date +%s)"
           awk -F'|' -v now="$now" -v ttl="${CACHE_TTL}" '(now - $3) < ttl' dns_cache.db > dns_cache_clean.db || true
           mv dns_cache_clean.db dns_cache.db
           echo "Resolved IPs: $(grep -c '|[0-9]' resolved_ips.txt || echo 0)"
           echo "::endgroup::"
+
           # ============================================
           # 4. PERFORMANCE TESTING (multi-sample)
           # ============================================
@@ -205,7 +221,9 @@ jobs:
             if (match($0, /.*:([0-9]{2,5})([/?#].*)?$/, p)) port=p[1]
             if (host && host in ip && ip[host] != "") print host"|"port"|"ip[host]"|"$0
           }' resolved_ips.txt filtered.txt > test_input.txt
+
           echo "Servers to test: $(wc -l < test_input.txt)"
+
           test_server() {
             local line="$1"
             local host port target link
@@ -258,35 +276,48 @@ jobs:
           }
           export -f test_server
           export TEST_TIMEOUT PING_ATTEMPTS MAX_SCORE
+
           cat test_input.txt | \
             parallel --jobs "${PARALLEL_JOBS}" --timeout "$((TEST_TIMEOUT * PING_ATTEMPTS + 5))" \
               test_server {} > scored.txt 2>/dev/null || true
+
           if [ ! -s scored.txt ]; then
             echo "::warning::All tests failed, using unfiltered list"
             awk -v maxscore="${MAX_SCORE}" '{print maxscore"|"$0}' filtered.txt > scored.txt
           fi
           echo "Tested servers: $(wc -l < scored.txt)"
           echo "::endgroup::"
+
           # ============================================
           # 5. SELECT BEST SERVERS
           # ============================================
           echo "::group::Selecting best servers"
           awk -F'|' -v maxscore="${MAX_SCORE}" '$1 < maxscore' scored.txt \
             | sort -t'|' -n -k1 > sorted.txt
+
           if [ ! -s sorted.txt ]; then
             echo "::warning::No reachable servers, falling back to full sorted list"
             sort -t'|' -n -k1 scored.txt > sorted.txt
           fi
+
           echo "Top 10 fastest (score|link):"
           head -n 10 sorted.txt | nl
-          cut -d'|' -f2- sorted.txt | head -n "${TOP_N}" > top_n.txt
+
+          # ИСПРАВЛЕНИЕ: вместо пайпа cut | head используем process substitution
+          if [ -s sorted.txt ]; then
+            head -n "${TOP_N}" <(cut -d'|' -f2- sorted.txt) > top_n.txt
+          else
+            touch top_n.txt
+          fi
           echo "::endgroup::"
+
           # ============================================
           # 6. GENERATE OUTPUT
           # ============================================
           echo "::group::Generating output"
           DATE="$(date +"%d.%m.%Y")"
           TIME="$(date +"%H:%M")"
+
           add_remark() {
             local link="$1"
             local name="$2"
@@ -295,6 +326,7 @@ jobs:
             encoded_name="$(printf '%s' "$name" | jq -sRr @uri)"
             echo "${link}#${encoded_name}"
           }
+
           {
             echo "# profile-title: 🐈 MeowMeres VPN"
             echo "# profile-update-interval: 720"
@@ -309,11 +341,13 @@ jobs:
               i=$((i + 1))
             done < top_n.txt
           } > ../public/vpn.txt
+
           cp ../public/vpn.txt ../public/android.txt 2>/dev/null || true
           gzip -fk ../public/vpn.txt || true
           gzip -fk ../public/android.txt || true
           echo "✅ Generated vpn.txt ($(wc -l < ../public/vpn.txt) lines)"
           echo "::endgroup::"
+
       - name: Verify output
         shell: bash
         run: |
@@ -331,6 +365,7 @@ jobs:
           if [ "$size" -lt 100 ]; then
             echo "::warning::Output file is suspiciously small ($size bytes)"
           fi
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
